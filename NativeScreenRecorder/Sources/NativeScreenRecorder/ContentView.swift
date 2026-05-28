@@ -4,23 +4,31 @@ struct ContentView: View {
     @EnvironmentObject private var store: RecorderStore
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
+        VStack(alignment: .leading, spacing: 16) {
             header
 
-            settingsPanel
-            statusPanel
+            ScrollView(.vertical) {
+                VStack(alignment: .leading, spacing: 12) {
+                    captureSection
+                    outputSection
+                }
+            }
 
-            Spacer(minLength: 0)
+            recordBar
         }
         .padding(20)
+        .background(.regularMaterial)
     }
+
+    // MARK: - Header
 
     private var header: some View {
         HStack {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Native Screen Recorder")
-                    .font(.system(size: 22, weight: .semibold))
-                Text("原生录屏，不影响当前声音播放。")
+            VStack(alignment: .leading, spacing: 4) {
+                Text("原生录屏")
+                    .font(.system(size: 22, weight: .bold))
+                Text("不影响当前声音播放")
+                    .font(.callout)
                     .foregroundStyle(.secondary)
             }
 
@@ -32,87 +40,136 @@ struct ContentView: View {
                     store.mergeAudioProcesses()
                 }
             } label: {
-                Label("刷新", systemImage: "arrow.clockwise")
+                Image(systemName: "arrow.clockwise")
+                    .font(.system(size: 14, weight: .medium))
             }
+            .buttonStyle(.borderless)
             .disabled(store.isRecording)
+            .help("刷新设备与应用列表")
         }
     }
 
-    private var settingsPanel: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            GroupBox("录制范围") {
-                VStack(alignment: .leading, spacing: 12) {
+    // MARK: - Capture Section
+
+    private var captureSection: some View {
+        GroupBox {
+            VStack(alignment: .leading, spacing: 12) {
+                // 录制模式
+                LabeledContent("录制模式") {
                     Picker("录制模式", selection: $store.captureMode) {
                         ForEach(CaptureMode.allCases) { mode in
                             Text(mode.title).tag(mode)
                         }
                     }
                     .pickerStyle(.segmented)
-                    .disabled(store.isRecording)
+                    .labelsHidden()
+                    .frame(maxWidth: 220)
+                }
+                .disabled(store.isRecording)
 
-                    if store.captureMode == .area {
-                        HStack {
-                            Button("拖选区域") {
-                                store.startAreaSelection()
-                            }
-                            .disabled(store.isRecording)
-                            if let rect = store.selectedAreaRect {
-                                Text("已选: \(Int(rect.width)) × \(Int(rect.height))")
-                                    .font(.callout)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                    }
+                Divider()
 
+                // 显示器
+                LabeledContent("显示器") {
                     Picker("显示器", selection: $store.selectedDisplayID) {
                         ForEach(store.displays) { display in
-                            Text("\(display.title)  \(display.subtitle)")
-                                .tag(Optional(display.id))
+                            Text(display.title).tag(Optional(display.id))
                         }
                     }
+                    .labelsHidden()
                     .disabled(store.isRecording)
+                }
 
+                if store.captureMode == .area {
+                    HStack(spacing: 8) {
+                        Button {
+                            store.startAreaSelection()
+                        } label: {
+                            Label("拖选区域", systemImage: "rectangle.dashed")
+                        }
+                        .disabled(store.isRecording)
+
+                        if let rect = store.selectedAreaRect {
+                            Text("已选: \(Int(rect.width)) × \(Int(rect.height))")
+                                .font(.callout)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+
+                Divider()
+
+                // 声音来源
+                LabeledContent("声音来源") {
                     Picker("声音来源", selection: $store.audioMode) {
                         ForEach(AudioCaptureMode.allCases) { mode in
                             Text(mode.title).tag(mode)
                         }
                     }
                     .pickerStyle(.segmented)
-                    .disabled(store.isRecording)
+                    .labelsHidden()
+                    .frame(maxWidth: 220)
+                }
+                .disabled(store.isRecording)
 
-                    if store.audioMode == .selectedApplication {
+                if store.audioMode == .selectedApplication {
+                    LabeledContent("应用") {
                         Picker("应用", selection: $store.selectedApplicationID) {
                             ForEach(store.applications) { app in
-                                Text(app.title).tag(Optional(app.id))
+                                Text(app.name).tag(Optional(app.id))
                             }
                         }
+                        .labelsHidden()
                         .disabled(store.isRecording)
                     }
+                }
 
+                Divider()
+
+                // 麦克风
+                HStack(alignment: .firstTextBaseline) {
                     Toggle(isOn: $store.isMicrophoneEnabled) {
                         Text("麦克风")
                     }
                     .disabled(store.isRecording)
-                }
-                .padding(.vertical, 8)
-            }
 
-            GroupBox("编码") {
-                VStack(alignment: .leading, spacing: 8) {
+                    Text("建议佩戴耳机以避免回声")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            .padding(.vertical, 8)
+            .padding(.horizontal, 4)
+        } label: {
+            Label("录制", systemImage: "rectangle.inset.filled.badge.record")
+        }
+    }
+
+    // MARK: - Output Section
+
+    private var outputSection: some View {
+        HStack(alignment: .top, spacing: 12) {
+            GroupBox {
+                VStack(alignment: .leading, spacing: 4) {
                     Picker("视频编码", selection: $store.preferredCodec) {
                         ForEach(VideoCodec.allCases) { codec in
                             Text(codec.title).tag(codec)
                         }
                     }
                     .pickerStyle(.segmented)
+                    .labelsHidden()
                     .disabled(store.isRecording)
                 }
-                .padding(.vertical, 8)
+                .padding(.vertical, 6)
+                .padding(.horizontal, 4)
+            } label: {
+                Label("编码", systemImage: "gearshape")
             }
 
-            GroupBox("保存") {
-                HStack(spacing: 12) {
-                    Text(store.outputURL.deletingLastPathComponent().path)
+            GroupBox {
+                HStack(spacing: 10) {
+                    Text(store.outputURL.lastPathComponent)
+                        .font(.callout)
                         .lineLimit(1)
                         .truncationMode(.middle)
                         .foregroundStyle(.secondary)
@@ -122,58 +179,36 @@ struct ContentView: View {
                     Button {
                         store.chooseOutputFolder()
                     } label: {
-                        Label("选择文件夹", systemImage: "folder")
+                        Image(systemName: "folder")
                     }
+                    .buttonStyle(.borderless)
                     .disabled(store.isRecording)
+                    .help("选择保存位置")
 
                     Button {
                         store.openOutputFolder()
                     } label: {
-                        Label("打开文件夹", systemImage: "folder.fill")
+                        Image(systemName: "folder.fill")
                     }
+                    .buttonStyle(.borderless)
+                    .help("打开保存位置")
                 }
-                .padding(.vertical, 8)
+                .padding(.vertical, 6)
+                .padding(.horizontal, 4)
+            } label: {
+                Label("存储", systemImage: "folder")
             }
         }
     }
 
-    private var statusPanel: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Button {
-                    Task {
-                        if store.isRecording {
-                            await store.stopRecording()
-                        } else {
-                            await store.startRecording()
-                        }
-                    }
-                } label: {
-                    Label(store.isRecording ? "停止" : "开始录制", systemImage: store.isRecording ? "stop.fill" : "record.circle")
-                        .frame(width: 116)
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(store.isRecording ? .red : .accentColor)
+    // MARK: - Record Bar
 
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(store.isRecording ? "录制中" : "待命")
-                        .font(.headline)
-                    Text(store.statusText)
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
-
-                Spacer(minLength: 0)
-            }
-
-            HStack(spacing: 14) {
-                InfoRow(label: "声音", value: store.audioMode.title)
-                InfoRow(label: "文件", value: store.outputURL.lastPathComponent)
-            }
-
+    private var recordBar: some View {
+        VStack(spacing: 10) {
             if let errorText = store.errorText {
-                VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 6) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.red)
                     Text(errorText)
                         .font(.callout)
                         .foregroundStyle(.red)
@@ -187,24 +222,37 @@ struct ContentView: View {
                     }
                 }
             }
-        }
-    }
-}
 
-private struct InfoRow: View {
-    let label: String
-    let value: String
+            HStack(spacing: 16) {
+                Button {
+                    Task {
+                        if store.isRecording {
+                            await store.stopRecording()
+                        } else {
+                            await store.startRecording()
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: store.isRecording ? "stop.fill" : "circle.fill")
+                            .font(.system(size: 12))
+                        Text(store.isRecording ? "停止录制" : "开始录制")
+                            .font(.system(size: 15, weight: .semibold))
+                    }
+                    .frame(width: 180, height: 36)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(store.isRecording ? .red : .blue)
 
-    var body: some View {
-        HStack(alignment: .firstTextBaseline) {
-            Text(label)
-                .foregroundStyle(.secondary)
-                .frame(width: 36, alignment: .leading)
-            Text(value)
-                .lineLimit(1)
-                .truncationMode(.middle)
-            Spacer(minLength: 0)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(store.isRecording ? "录制中" : "就绪")
+                        .font(.subheadline.weight(.medium))
+                    Text(store.statusText)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
         }
-        .font(.callout)
     }
 }

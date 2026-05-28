@@ -8,7 +8,7 @@ struct NativeScreenRecorderApp: App {
         WindowGroup {
             ContentView()
                 .environmentObject(store)
-                .frame(width: 560, height: 430)
+                .frame(minWidth: 520, minHeight: 480)
                 .task {
                     await store.refreshShareableContent()
                     // Defer audio process scanning to avoid CoreAudio assertion at startup
@@ -16,6 +16,7 @@ struct NativeScreenRecorderApp: App {
                     store.mergeAudioProcesses()
                 }
         }
-        .windowResizability(.contentSize)
+        .defaultSize(width: 580, height: 520)
+        .windowResizability(.contentMinSize)
     }
 }

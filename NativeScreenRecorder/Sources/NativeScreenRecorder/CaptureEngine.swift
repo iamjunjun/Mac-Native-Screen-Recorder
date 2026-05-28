@@ -10,6 +10,7 @@ enum CaptureEngineError: LocalizedError {
     case notRecording
     case streamStopped(Error?)
     case processTapUnavailable
+    case microphonePermissionDenied
 
     var errorDescription: String? {
         switch self {
@@ -25,6 +26,8 @@ enum CaptureEngineError: LocalizedError {
             return error?.localizedDescription ?? "录制流已停止。"
         case .processTapUnavailable:
             return "Core Audio Process Tap 需要 macOS 14.2 或更新版本。"
+        case .microphonePermissionDenied:
+            return "麦克风权限未授权，请在系统设置 → 隐私与安全性 → 麦克风中允许本应用。"
         }
     }
 }
@@ -33,8 +36,12 @@ final class CaptureEngine: NSObject, @unchecked Sendable {
     private let sampleQueue = DispatchQueue(label: "NativeScreenRecorder.ScreenCaptureSamples")
     private var stream: SCStream?
     private var audioCapture: ProcessTapAudioCapture?
+    private var audioMixer: AudioMixer?
+    private var micEngine: AVAudioEngine?
     private var writer: MovieFileWriter?
     private var isRecording = false
+    private var lastSystemAudioTime: CMTime = .zero
+    private var machTimebase = mach_timebase_info()
 
     func start(request: RecordingRequest) async throws {
         guard !isRecording else { throw CaptureEngineError.alreadyRecording }
@@ -106,13 +113,27 @@ final class CaptureEngine: NSObject, @unchecked Sendable {
         let stream = SCStream(filter: filter, configuration: configuration, delegate: self)
         try stream.addStreamOutput(self, type: .screen, sampleHandlerQueue: sampleQueue)
 
+        let mixer = AudioMixer()
+        if request.isMicrophoneEnabled {
+            let micGranted = await requestMicrophonePermission()
+            guard micGranted else {
+                audioCapture.stop()
+                throw CaptureEngineError.microphonePermissionDenied
+            }
+            mixer.setSystemFormat(audioFormat)
+            try startMicrophoneCapture(matching: audioFormat, mixer: mixer)
+        }
+
         self.writer = writer
         self.stream = stream
         self.audioCapture = audioCapture
+        self.audioMixer = request.isMicrophoneEnabled ? mixer : nil
 
         audioCapture.onSampleBuffer = { [weak self] sampleBuffer in
             guard let self else { return }
-            self.writer?.append(sampleBuffer, mediaType: .audio)
+            self.lastSystemAudioTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
+            let output = self.audioMixer?.mix(system: sampleBuffer) ?? sampleBuffer
+            self.writer?.append(output, mediaType: .audio)
         }
 
         do {
@@ -133,6 +154,9 @@ final class CaptureEngine: NSObject, @unchecked Sendable {
 
         audioCapture?.stop()
         audioCapture = nil
+        audioMixer = nil
+        micEngine?.stop()
+        micEngine = nil
         try await stream.stopCapture()
         self.stream = nil
         isRecording = false
@@ -163,6 +187,54 @@ extension CaptureEngine: SCStreamDelegate {
     func stream(_ stream: SCStream, didStopWithError error: Error) {
         isRecording = false
         self.stream = nil
+    }
+}
+
+// MARK: - Microphone via AVAudioEngine
+
+extension CaptureEngine {
+    private func requestMicrophonePermission() async -> Bool {
+        if #available(macOS 14.0, *) {
+            return await AVAudioApplication.requestRecordPermission()
+        }
+        return true
+    }
+
+    private func isSystemAudioActive() -> Bool {
+        if machTimebase.denom == 0 { mach_timebase_info(&machTimebase) }
+        let now = mach_absolute_time()
+        let nowNanos = now * UInt64(machTimebase.numer) / UInt64(machTimebase.denom)
+        let lastSecs = CMTimeGetSeconds(lastSystemAudioTime)
+        if lastSecs.isNaN || lastSecs <= 0 { return false }
+        let lastNanos = UInt64(lastSecs * 1_000_000_000)
+        let elapsed = nowNanos > lastNanos ? nowNanos - lastNanos : 0
+        return elapsed < 200_000_000  // within 200ms
+    }
+
+    private func startMicrophoneCapture(matching audioFormat: AudioStreamBasicDescription, mixer: AudioMixer) throws {
+        let engine = AVAudioEngine()
+        let inputNode = engine.inputNode
+
+        // Use mic native format; AudioMixer handles mono→stereo expansion
+        let micFormat = inputNode.outputFormat(forBus: 0)
+        inputNode.installTap(onBus: 0, bufferSize: 1024, format: micFormat) { [weak self] micBuffer, _ in
+            guard let self else { return }
+            mixer.enqueueMic(pcmBuffer: micBuffer)
+
+            // Dispatch off the realtime audio thread — CMSampleBuffer creation
+            // and AVAssetWriter append must not happen on a realtime thread.
+            self.sampleQueue.async { [weak self] in
+                guard let self else { return }
+                if !self.isSystemAudioActive() {
+                    if let micSB = mixer.makeMicOnlyCMSampleBuffer() {
+                        self.writer?.append(micSB, mediaType: .audio)
+                    }
+                }
+            }
+        }
+
+        try engine.start()
+        micEngine = engine
     }
 }
 

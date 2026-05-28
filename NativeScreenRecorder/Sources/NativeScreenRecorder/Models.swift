@@ -82,4 +82,5 @@ struct RecordingRequest {
     let captureMode: CaptureMode
     let sourceRect: CGRect?
     let preferredCodec: VideoCodec
+    let isMicrophoneEnabled: Bool
 }

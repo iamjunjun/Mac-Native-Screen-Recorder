@@ -17,11 +17,13 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>2.0.0</string>
+	<string>2.2.0</string>
 	<key>CFBundleVersion</key>
-	<string>3</string>
+	<string>4</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>14.2</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>用于在录制系统声音的同时录制麦克风语音。</string>
 	<key>NSAudioCaptureUsageDescription</key>
 	<string>用于录制系统或指定应用正在播放的声音。</string>
 	<key>NSScreenCaptureUsageDescription</key>

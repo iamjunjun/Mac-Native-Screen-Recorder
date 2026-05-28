@@ -88,6 +88,11 @@ struct ContentView: View {
                         }
                         .disabled(store.isRecording)
                     }
+
+                    Toggle(isOn: $store.isMicrophoneEnabled) {
+                        Text("麦克风")
+                    }
+                    .disabled(store.isRecording)
                 }
                 .padding(.vertical, 8)
             }

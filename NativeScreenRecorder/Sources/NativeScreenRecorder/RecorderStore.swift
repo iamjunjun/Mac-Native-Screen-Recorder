@@ -14,6 +14,7 @@ final class RecorderStore: ObservableObject {
     @Published var selectedAreaRect: CGRect? = nil
     @Published var outputURL: URL = RecorderStore.defaultOutputURL()
     @Published var isRecording = false
+    @Published var isMicrophoneEnabled = false
     @Published var statusText = "准备录制"
     @Published var errorText: String?
 
@@ -167,7 +168,8 @@ final class RecorderStore: ObservableObject {
                 outputURL: outputURL,
                 captureMode: captureMode,
                 sourceRect: captureMode == .area ? selectedAreaRect : nil,
-                preferredCodec: preferredCodec
+                preferredCodec: preferredCodec,
+                isMicrophoneEnabled: isMicrophoneEnabled
             )
 
             try await captureEngine.start(request: request)

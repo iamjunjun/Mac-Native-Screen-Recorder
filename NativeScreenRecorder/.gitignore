@@ -1,0 +1,9 @@
+.build/
+.swiftpm/
+DerivedData/
+Build/
+.DS_Store
+*.xcuserstate
+*.xcuserdata/
+*.mp4
+*.mov

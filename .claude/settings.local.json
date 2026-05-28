@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(rm -rf '/Users/linjun/Documents/System sound loading/NativeScreenRecorder/App/AppIcon.iconset')",
+      "Bash(mkdir -p '/Users/linjun/Documents/System sound loading/NativeScreenRecorder/App/AppIcon.iconset')",
+      "Bash(sips -z 16 16 /Users/linjun/Desktop/icon.jpg --out '/Users/linjun/Documents/System sound loading/NativeScreenRecorder/App/AppIcon.iconset/icon_16x16.png')",
+      "Bash(sips -z 32 32 /Users/linjun/Desktop/icon.jpg --out '/Users/linjun/Documents/System sound loading/NativeScreenRecorder/App/AppIcon.iconset/icon_16x16@2x.png')",
+      "Bash(sips -z 32 32 /Users/linjun/Desktop/icon.jpg --out '/Users/linjun/Documents/System sound loading/NativeScreenRecorder/App/AppIcon.iconset/icon_32x32.png')",
+      "Bash(sips -s format png -z 16 16 /Users/linjun/Desktop/icon.jpg --out '/Users/linjun/Documents/System sound loading/NativeScreenRecorder/App/AppIcon.iconset/icon_16x16.png')",
+      "Bash(sips -s format png -z 32 32 /Users/linjun/Desktop/icon.jpg --out '/Users/linjun/Documents/System sound loading/NativeScreenRecorder/App/AppIcon.iconset/icon_16x16@2x.png')",
+      "Bash(sips -s format png -z 32 32 /Users/linjun/Desktop/icon.jpg --out '/Users/linjun/Documents/System sound loading/NativeScreenRecorder/App/AppIcon.iconset/icon_32x32.png')",
+      "Bash(sips -s format png -z 64 64 /Users/linjun/Desktop/icon.jpg --out '/Users/linjun/Documents/System sound loading/NativeScreenRecorder/App/AppIcon.iconset/icon_32x32@2x.png')",
+      "Bash(sips -s format png -z 128 128 /Users/linjun/Desktop/icon.jpg --out '/Users/linjun/Documents/System sound loading/NativeScreenRecorder/App/AppIcon.iconset/icon_128x128.png')",
+      "Bash(iconutil -c icns '/Users/linjun/Documents/System sound loading/NativeScreenRecorder/App/AppIcon.iconset' -o '/Users/linjun/Documents/System sound loading/NativeScreenRecorder/App/AppIcon.icns')",
+      "Bash(bash *)",
+      "Bash(security find-identity *)",
+      "Bash(swift -e ' *)",
+      "Bash(swift *)",
+      "WebSearch",
+      "WebFetch(domain:origin-devforums.apple.com)",
+      "WebFetch(domain:github.com)",
+      "Bash(git init *)",
+      "Bash(git add *)",
+      "Bash(git rm *)"
+    ]
+  }
+}

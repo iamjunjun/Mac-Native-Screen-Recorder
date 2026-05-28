@@ -13,6 +13,40 @@ struct AudioProcessDiscovery {
         let isRunningOutput: Bool
     }
 
+    /// Find all audio-producing PIDs that belong to the same app as the given PID.
+    /// Handles multi-process browsers (Chrome, Edge) and Safari-style XPC services.
+    static func discoverAudioPIDs(forApplicationPID pid: pid_t) -> [pid_t] {
+        let runningApp = NSRunningApplication(processIdentifier: pid)
+        let bundleURL = runningApp?.bundleURL
+        let appName = runningApp?.localizedName ?? ""
+        let all = discoverRunningAudioProcesses()
+        return all.compactMap { proc -> pid_t? in
+            if proc.pid == pid { return pid }
+
+            // Chrome-style: sub-processes inside the app bundle
+            if let bundleURL, let procPath = executablePath(for: proc.pid),
+               procPath.hasPrefix(bundleURL.path) {
+                return proc.pid
+            }
+
+            // Safari-style: XPC services named after the app (e.g. "Safari Graphics and Media")
+            if !appName.isEmpty, proc.name.localizedCaseInsensitiveContains(appName) {
+                return proc.pid
+            }
+
+            return nil
+        }
+    }
+
+    private static func executablePath(for pid: pid_t) -> String? {
+        var pathBuf = [CChar](repeating: 0, count: 4096)
+        guard proc_pidpath(pid, &pathBuf, UInt32(pathBuf.count)) > 0 else { return nil }
+        return pathBuf.withUnsafeBytes { raw in
+            let len = raw.firstIndex(of: 0) ?? raw.count
+            return String(decoding: raw[0..<len], as: UTF8.self)
+        }
+    }
+
     static func discoverRunningAudioProcesses() -> [AudioProcessInfo] {
         var result: [AudioProcessInfo] = []
 

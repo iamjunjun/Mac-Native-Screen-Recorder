@@ -50,11 +50,14 @@ final class CaptureEngine: NSObject, @unchecked Sendable {
         case .globalSystem:
             tapTarget = .global(excludingCurrentProcess: true)
         case .selectedApplication:
-            guard let pid = request.applicationProcessID,
-                  let app = content.applications.first(where: { $0.processID == pid }) else {
+            guard let pid = request.applicationProcessID else {
                 throw CaptureEngineError.noApplication
             }
-            tapTarget = .process(pid: app.processID)
+            // Multi-process browsers (Chrome, Edge, etc.) produce audio from
+            // sub-processes, not the main process. Discover all related PIDs.
+            let audioPIDs = AudioProcessDiscovery.discoverAudioPIDs(forApplicationPID: pid)
+            let pids = audioPIDs.isEmpty ? [pid] : audioPIDs
+            tapTarget = .processes(pids: pids)
         }
 
         let displayID = display.displayID

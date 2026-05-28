@@ -5,7 +5,7 @@ import Foundation
 
 enum ProcessTapTarget: Sendable {
     case global(excludingCurrentProcess: Bool)
-    case process(pid: pid_t)
+    case processes(pids: [pid_t])
 }
 
 final class ProcessTapAudioCapture: @unchecked Sendable {
@@ -90,9 +90,9 @@ final class ProcessTapAudioCapture: @unchecked Sendable {
             let currentProcess = try? processObjectID(for: ProcessInfo.processInfo.processIdentifier)
             let excluded = excludingCurrentProcess ? Array([currentProcess].compactMap { $0 }) : []
             return CATapDescription(stereoGlobalTapButExcludeProcesses: excluded)
-        case .process(let pid):
-            let processObjectID = try processObjectID(for: pid)
-            return CATapDescription(stereoMixdownOfProcesses: [processObjectID])
+        case .processes(let pids):
+            let processObjectIDs = try pids.map { try processObjectID(for: $0) }
+            return CATapDescription(stereoMixdownOfProcesses: processObjectIDs)
         }
     }
 

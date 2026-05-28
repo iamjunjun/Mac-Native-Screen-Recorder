@@ -27,7 +27,10 @@ struct ContentView: View {
             Spacer()
 
             Button {
-                Task { await store.refreshShareableContent() }
+                Task {
+                    await store.refreshShareableContent()
+                    store.mergeAudioProcesses()
+                }
             } label: {
                 Label("刷新", systemImage: "arrow.clockwise")
             }

@@ -36,9 +36,10 @@ cp App/AppIcon.icns "$APP_DIR/Contents/Resources/"
 ```
 Sources/NativeScreenRecorder/
 ├── NativeScreenRecorderApp.swift    # @main 入口，.task 中刷新内容 + 延迟合并音频进程
-├── ContentView.swift                # SwiftUI 界面：录制模式、编码、保存、状态
+├── ContentView.swift                # SwiftUI 界面，Modern 风格，毛玻璃背景，图标化分区
 ├── RecorderStore.swift              # @MainActor ObservableObject，所有 UI 状态 + 录制控制
-├── CaptureEngine.swift              # SCStream 管理，Retina 像素尺寸，sourceRect，编码配置
+├── CaptureEngine.swift              # SCStream 管理 + AVAudioEngine 麦克风 + AudioMixer 集成
+├── AudioMixer.swift                 # PCM 音频混合器，系统音频+麦克风混音，tanh 软削波
 ├── MovieFileWriter.swift            # AVAssetWriter MP4，H.264/HEVC 码率阶梯
 ├── Models.swift                     # AudioCaptureMode, CaptureMode, VideoCodec, RecordingRequest
 ├── ProcessTapAudioCapture.swift     # CoreAudio Process Tap，聚合设备，音频回调->CMSampleBuffer
@@ -53,14 +54,21 @@ Sources/NativeScreenRecorder/
 ```
 SCStream(display filter) ──screen frames──> CaptureEngine ──CMSampleBuffer──> MovieFileWriter
 ProcessTapAudioCapture ──audio buffers──> CaptureEngine ──CMSampleBuffer──> MovieFileWriter
-                                                        └── AVAssetWriter ──> .mp4
+AVAudioEngine(mic tap) ──PCM buffer──> AudioMixer ──CMSampleBuffer──> MovieFileWriter
+                                              ↑ system audio CMSampleBuffer
+                                              └── AVAssetWriter ──> .mp4
 ```
+
+- 系统音频通过 ProcessTap 回调驱动写入
+- 麦克风通过 AVAudioEngine inputNode installTap 捕获，memcpy 到 AudioMixer 预分配缓冲区
+- AudioMixer.mix(system:) 混音后输出；当系统音频静默时，makeMicOnlyCMSampleBuffer() 单独输出麦克风
 
 ### 录制模式
 
 - **全屏**: `configuration.width/height = mode.pixelWidth/pixelHeight`（CGDisplayCopyDisplayMode 取物理像素）
 - **区域**: `configuration.sourceRect` (Quartz 坐标) + `configuration.width/height = 裁剪后像素尺寸`
 - **声音**: 全局系统声音 / 指定应用声音 (ProcessTapAudioCapture)
+- **麦克风**: 开关控制，与系统音频混音为单条音轨
 
 ## 关键设计决策与坑
 
@@ -92,7 +100,30 @@ CoreAudio 进程列表(`discoverRunningAudioProcesses`) 延迟 500ms 在 `mergeA
 - 颜色: #CACACA
 - 排除录制: `window.sharingType = .none`
 
+### 8. AudioMixer 线程安全与 AVAudioPCMBuffer 生命周期
+`AVAudioPCMBuffer` 仅在 tap 回调内有效，回调返回后底层内存被释放。不能直接存储引用。
+**修复**: `enqueueMic` 在 realtime 线程上立即将 float samples 拷贝到预分配的 `UnsafeMutablePointer<Float>` 缓冲区。
+后续 `makeMicOnlyCMSampleBuffer()` 和 `mix(system:)` 在锁内将数据再拷贝为 `[Float]`，防止 `enqueueMic` 并发 realloc 导致 use-after-free。
+
+### 9. mach_timebase 除以零崩溃
+`mach_timebase_info()` 返回全零结构体（denom=0）。在 Swift debug 模式下，`UInt64` 除以零触发 `_assertionFailure` → SIGTRAP。
+**修复**: 先检查 `if machTimebase.denom == 0 { mach_timebase_info(&machTimebase) }`，再计算 `nanos = now * numer / denom`。
+
+### 10. 麦克风采样率不匹配
+`makeMicOnlyCMSampleBuffer` 曾以系统音频采样率（如 48000Hz）输出麦克风数据，但 Mac 内置麦可能是 44100Hz，导致音调偏移（变声）。
+**修复**: 存储 `micSampleRate`，输出时使用麦克风实际采样率。
+
+### 11. 麦克风回声问题
+录制时如果同时用扬声器播放系统声音，麦克风会录到扬声器输出的声音，造成回声。
+**建议**: UI 中提示用户佩戴耳机。
+
+### 12. 浏览器多进程音频发现
+Chrome/Edge 等浏览器将音频放在子进程中，Safari 的 WebKit.GPU 是 XPC 服务（不在主应用 bundle 内）。
+`AudioProcessDiscovery.discoverAudioPIDs(forApplicationPID:)` 先用 bundle 路径前缀匹配（Chrome 类），再用进程名模糊匹配（Safari 类）。
+
 ## 版本
 
 - **v2.0**: 系统音频录制功能（ProcessTapAudioCapture）
-- **v2.1** (当前): 区域录制、HEVC 编码、浏览器音频发现、崩溃修复
+- **v2.1**: 区域录制、HEVC 编码、浏览器音频发现、崩溃修复
+- **v2.2**: 麦克风混音录制（AudioMixer），支持系统音频+麦克风混合输出
+- **v2.3** (当前): UI 重新设计，Modern 风格，毛玻璃背景，图标化分区，窗口可调大小

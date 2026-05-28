@@ -9,12 +9,16 @@ final class RecorderStore: ObservableObject {
     @Published var selectedDisplayID: UInt32?
     @Published var selectedApplicationID: pid_t?
     @Published var audioMode: AudioCaptureMode = .globalSystem
+    @Published var captureMode: CaptureMode = .fullScreen
+    @Published var preferredCodec: VideoCodec = .hevc
+    @Published var selectedAreaRect: CGRect? = nil
     @Published var outputURL: URL = RecorderStore.defaultOutputURL()
     @Published var isRecording = false
     @Published var statusText = "准备录制"
     @Published var errorText: String?
 
     private let captureEngine = CaptureEngine()
+    private var recordingAreaOverlay: NSWindow?
 
     var isPermissionDenied: Bool { errorText?.contains("TCC") == true || errorText?.contains("权限") == true }
 
@@ -49,6 +53,9 @@ final class RecorderStore: ObservableObject {
                 }
                 .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
 
+            // Audio process merging is deferred to mergeAudioProcesses()
+            // to avoid CoreAudio assertion failures at startup.
+
             selectedDisplayID = selectedDisplayID ?? displays.first?.id
             selectedApplicationID = selectedApplicationID ?? applications.first?.id
             statusText = "已刷新可录制内容"
@@ -68,6 +75,24 @@ final class RecorderStore: ObservableObject {
         }
     }
 
+    func mergeAudioProcesses() {
+        var allAppOptions = applications
+        var seenPIDs = Set(applications.map(\.id))
+        let audioProcesses = AudioProcessDiscovery.discoverRunningAudioProcesses()
+        for proc in audioProcesses {
+            guard !seenPIDs.contains(proc.pid) else { continue }
+            seenPIDs.insert(proc.pid)
+            allAppOptions.append(ApplicationOption(
+                id: proc.pid,
+                name: proc.name,
+                bundleIdentifier: proc.bundleIdentifier
+            ))
+        }
+        applications = allAppOptions.sorted {
+            $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+        }
+    }
+
     func chooseOutputFolder() {
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true
@@ -77,6 +102,42 @@ final class RecorderStore: ObservableObject {
 
         if panel.runModal() == .OK, let folder = panel.url {
             outputURL = folder.appendingPathComponent(Self.defaultFileName())
+        }
+    }
+
+    func openOutputFolder() {
+        NSWorkspace.shared.open(outputURL.deletingLastPathComponent())
+    }
+
+    func startAreaSelection() {
+        guard let displayID = selectedDisplayID else { return }
+        let screens = NSScreen.screens
+        guard let screen = screens.first(where: {
+            ($0.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? UInt32) == displayID
+        }) else { return }
+
+        let window = AreaSelectionOverlayWindow.create(on: screen)
+        guard let overlayView = window.contentView as? AreaSelectionOverlayView else { return }
+
+        NSApp.keyWindow?.miniaturize(nil)
+
+        overlayView.onSelectionComplete = { [weak self, weak window] appKitRect in
+            window?.orderOut(nil)
+            NSApp.keyWindow?.deminiaturize(nil)
+            guard let self else { return }
+            let quartzRect = AreaSelectionOverlayView.convertToQuartzSourceRect(
+                appKitRect: appKitRect, displayID: displayID
+            )
+            self.selectedAreaRect = quartzRect
+            self.captureMode = .area
+            self.statusText = "已选择区域：\(Int(quartzRect.width)) × \(Int(quartzRect.height))"
+        }
+
+        overlayView.onCancel = { [weak self, weak window] in
+            window?.orderOut(nil)
+            NSApp.keyWindow?.deminiaturize(nil)
+            self?.captureMode = .fullScreen
+            self?.selectedAreaRect = nil
         }
     }
 
@@ -92,19 +153,31 @@ final class RecorderStore: ObservableObject {
             return
         }
 
+        if captureMode == .area && selectedAreaRect == nil {
+            errorText = "请先拖选录制区域。"
+            return
+        }
+
         do {
             outputURL = outputURL.deletingLastPathComponent().appendingPathComponent(Self.defaultFileName())
             let request = RecordingRequest(
                 displayID: displayID,
                 audioMode: audioMode,
                 applicationProcessID: selectedApplicationID,
-                outputURL: outputURL
+                outputURL: outputURL,
+                captureMode: captureMode,
+                sourceRect: captureMode == .area ? selectedAreaRect : nil,
+                preferredCodec: preferredCodec
             )
 
             try await captureEngine.start(request: request)
             isRecording = true
             statusText = "正在录制到 \(outputURL.lastPathComponent)"
             errorText = nil
+
+            if captureMode == .area, let areaRect = selectedAreaRect, let displayID = selectedDisplayID {
+                recordingAreaOverlay = RecordingAreaOverlay.show(sourceRect: areaRect, displayID: displayID)
+            }
         } catch {
             errorText = readableError(error)
             statusText = "启动录制失败"
@@ -113,6 +186,9 @@ final class RecorderStore: ObservableObject {
 
     func stopRecording() async {
         guard isRecording else { return }
+
+        recordingAreaOverlay?.orderOut(nil)
+        recordingAreaOverlay = nil
 
         do {
             try await captureEngine.stop()

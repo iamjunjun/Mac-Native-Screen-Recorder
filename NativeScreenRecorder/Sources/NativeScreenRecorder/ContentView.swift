@@ -39,6 +39,28 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 12) {
             GroupBox("录制范围") {
                 VStack(alignment: .leading, spacing: 12) {
+                    Picker("录制模式", selection: $store.captureMode) {
+                        ForEach(CaptureMode.allCases) { mode in
+                            Text(mode.title).tag(mode)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .disabled(store.isRecording)
+
+                    if store.captureMode == .area {
+                        HStack {
+                            Button("拖选区域") {
+                                store.startAreaSelection()
+                            }
+                            .disabled(store.isRecording)
+                            if let rect = store.selectedAreaRect {
+                                Text("已选: \(Int(rect.width)) × \(Int(rect.height))")
+                                    .font(.callout)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+
                     Picker("显示器", selection: $store.selectedDisplayID) {
                         ForEach(store.displays) { display in
                             Text("\(display.title)  \(display.subtitle)")
@@ -67,6 +89,19 @@ struct ContentView: View {
                 .padding(.vertical, 8)
             }
 
+            GroupBox("编码") {
+                VStack(alignment: .leading, spacing: 8) {
+                    Picker("视频编码", selection: $store.preferredCodec) {
+                        ForEach(VideoCodec.allCases) { codec in
+                            Text(codec.title).tag(codec)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .disabled(store.isRecording)
+                }
+                .padding(.vertical, 8)
+            }
+
             GroupBox("保存") {
                 HStack(spacing: 12) {
                     Text(store.outputURL.deletingLastPathComponent().path)
@@ -82,6 +117,12 @@ struct ContentView: View {
                         Label("选择文件夹", systemImage: "folder")
                     }
                     .disabled(store.isRecording)
+
+                    Button {
+                        store.openOutputFolder()
+                    } label: {
+                        Label("打开文件夹", systemImage: "folder.fill")
+                    }
                 }
                 .padding(.vertical, 8)
             }

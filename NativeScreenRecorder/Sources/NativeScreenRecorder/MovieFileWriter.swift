@@ -1,5 +1,6 @@
 import AVFoundation
 import Foundation
+import VideoToolbox
 
 final class MovieFileWriter: @unchecked Sendable {
     private let writer: AVAssetWriter
@@ -8,20 +9,42 @@ final class MovieFileWriter: @unchecked Sendable {
     private var didStartSession = false
     private var didFinish = false
 
-    init(outputURL: URL, width: Int, height: Int, audioFormat: AudioStreamBasicDescription) throws {
+    init(outputURL: URL, width: Int, height: Int, audioFormat: AudioStreamBasicDescription,
+         videoCodec: VideoCodec = .hevc) throws {
         if FileManager.default.fileExists(atPath: outputURL.path) {
             try FileManager.default.removeItem(at: outputURL)
         }
 
         writer = try AVAssetWriter(outputURL: outputURL, fileType: .mp4)
 
+        let pixelCount = width * height
+        let (codecType, profileLevel, bitRate): (AVVideoCodecType, String, Int) = {
+            switch videoCodec {
+            case .h264:
+                let bitRate: Int
+                if pixelCount <= 1280 * 720       { bitRate =  3_000_000 }
+                else if pixelCount <= 1920 * 1080 { bitRate =  6_000_000 }
+                else if pixelCount <= 2560 * 1440 { bitRate = 12_000_000 }
+                else                              { bitRate = 25_000_000 }
+                return (.h264, AVVideoProfileLevelH264HighAutoLevel, bitRate)
+            case .hevc:
+                let bitRate: Int
+                if pixelCount <= 1280 * 720       { bitRate =  2_000_000 }
+                else if pixelCount <= 1920 * 1080 { bitRate =  4_000_000 }
+                else if pixelCount <= 2560 * 1440 { bitRate =  7_000_000 }
+                else                              { bitRate = 15_000_000 }
+                return (.hevc, kVTProfileLevel_HEVC_Main_AutoLevel as String, bitRate)
+            }
+        }()
+
         let videoSettings: [String: Any] = [
-            AVVideoCodecKey: AVVideoCodecType.h264,
+            AVVideoCodecKey: codecType,
             AVVideoWidthKey: width,
             AVVideoHeightKey: height,
             AVVideoCompressionPropertiesKey: [
-                AVVideoAverageBitRateKey: max(width * height * 4, 6_000_000),
-                AVVideoProfileLevelKey: AVVideoProfileLevelH264HighAutoLevel
+                AVVideoAverageBitRateKey: bitRate,
+                AVVideoProfileLevelKey: profileLevel,
+                AVVideoAllowFrameReorderingKey: true
             ]
         ]
 

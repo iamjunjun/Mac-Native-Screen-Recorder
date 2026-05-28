@@ -25,6 +25,34 @@ enum AudioCaptureMode: String, CaseIterable, Identifiable {
     }
 }
 
+enum CaptureMode: String, CaseIterable, Identifiable {
+    case fullScreen
+    case area
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .fullScreen: return "全屏"
+        case .area:       return "区域选择"
+        }
+    }
+}
+
+enum VideoCodec: String, CaseIterable, Identifiable {
+    case h264
+    case hevc
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .h264: return "H.264"
+        case .hevc: return "HEVC (H.265)"
+        }
+    }
+}
+
 struct DisplayOption: Identifiable, Hashable {
     let id: UInt32
     let title: String
@@ -51,4 +79,7 @@ struct RecordingRequest {
     let audioMode: AudioCaptureMode
     let applicationProcessID: pid_t?
     let outputURL: URL
+    let captureMode: CaptureMode
+    let sourceRect: CGRect?
+    let preferredCodec: VideoCodec
 }

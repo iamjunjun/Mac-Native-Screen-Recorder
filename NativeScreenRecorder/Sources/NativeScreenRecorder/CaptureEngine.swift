@@ -57,23 +57,47 @@ final class CaptureEngine: NSObject, @unchecked Sendable {
             tapTarget = .process(pid: app.processID)
         }
 
+        let displayID = display.displayID
+        guard let mode = CGDisplayCopyDisplayMode(displayID) else {
+            throw CaptureEngineError.noDisplay
+        }
+        let pixelWidth = mode.pixelWidth
+        let pixelHeight = mode.pixelHeight
+
         let configuration = SCStreamConfiguration()
-        configuration.width = display.width
-        configuration.height = display.height
         configuration.minimumFrameInterval = CMTime(value: 1, timescale: 30)
         configuration.queueDepth = 6
         configuration.showsCursor = true
         configuration.capturesAudio = false
         configuration.excludesCurrentProcessAudio = true
+        configuration.pixelFormat = kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange
+        configuration.scalesToFit = false
 
         let audioCapture = ProcessTapAudioCapture(target: tapTarget)
         let audioFormat = try audioCapture.prepare()
 
+        let pointScale = CGFloat(pixelWidth) / CGFloat(display.width)
+        let writerWidth: Int
+        let writerHeight: Int
+        if request.captureMode == .area, let sourceRect = request.sourceRect {
+            writerWidth = Int(sourceRect.width * pointScale)
+            writerHeight = Int(sourceRect.height * pointScale)
+            configuration.sourceRect = sourceRect
+            configuration.width = writerWidth
+            configuration.height = writerHeight
+        } else {
+            writerWidth = pixelWidth
+            writerHeight = pixelHeight
+            configuration.width = pixelWidth
+            configuration.height = pixelHeight
+        }
+
         let writer = try MovieFileWriter(
             outputURL: request.outputURL,
-            width: display.width,
-            height: display.height,
-            audioFormat: audioFormat
+            width: writerWidth,
+            height: writerHeight,
+            audioFormat: audioFormat,
+            videoCodec: request.preferredCodec
         )
 
         let stream = SCStream(filter: filter, configuration: configuration, delegate: self)

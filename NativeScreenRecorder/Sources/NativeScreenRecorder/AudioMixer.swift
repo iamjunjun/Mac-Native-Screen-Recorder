@@ -179,9 +179,10 @@ final class AudioMixer: @unchecked Sendable {
                 guard micF < chunk.frameCount else { continue }
 
                 let micSample = chunk.samples[micF * chunk.channelCount + srcCh]
+                let mixGain: Float = 0.5
                 for ch in 0..<sysCh {
                     let outIdx = sysF * sysCh + ch
-                    sysSamples[outIdx] = tanhf(sysSamples[outIdx] + micSample)
+                    sysSamples[outIdx] = sysSamples[outIdx] + micSample * mixGain
                 }
             }
         }

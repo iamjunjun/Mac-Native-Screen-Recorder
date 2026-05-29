@@ -21,7 +21,25 @@
       "WebFetch(domain:github.com)",
       "Bash(git init *)",
       "Bash(git add *)",
-      "Bash(git rm *)"
+      "Bash(git rm *)",
+      "Bash(git commit -m ' *)",
+      "WebFetch(domain:stackoverflow.com)",
+      "Bash(git clone *)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(ps -eo pid,ppid,comm)",
+      "Bash(ps -eo pid,ppid,comm,args)",
+      "Bash(awk '$2 == 1160 || $1 == 1160 || $2 == 2414 || $1 == 2414 || $2 == 2517 || $1 == 2517 || $2 == 2303 || $1 == 2303 || $2 == 6081 || $1 == 6081 || $1 == 2303')",
+      "Bash(xcrun --show-sdk-version)",
+      "Bash(nm /Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks/ScreenCaptureKit.framework/Versions/A/ScreenCaptureKit.tbd)",
+      "Bash(nm \"/Users/linjun/Documents/System sound loading/NativeScreenRecorder/.build/arm64-apple-macosx/release/NativeScreenRecorder\")",
+      "Bash(echo \"---exit: $?\")",
+      "Bash(mdfind \"kMDItemFSName == 'NativeScreenRecorder.app'\")",
+      "Bash(dwarfdump --uuid '/Users/linjun/Documents/System sound loading/NativeScreenRecorder/NativeScreenRecorder.app/Contents/MacOS/NativeScreenRecorder')",
+      "Bash(echo \"---$?\")",
+      "Bash(git commit *)",
+      "Bash(./Scripts/package_app.sh)",
+      "Bash(ls -la Scripts/)",
+      "Bash(cat Scripts/package_app.sh)"
     ]
   }
 }

@@ -175,8 +175,8 @@ final class AudioMixer: @unchecked Sendable {
             for f in 0..<mixFrames {
                 let sysF = sysStartFrame + f
                 guard sysF < sysFrames else { break }
-                let micF = micStartFrame + Int(Double(f) * chunk.sampleRate / sysSR + 0.5)
-                guard micF < chunk.frameCount else { break }
+                let micF = micStartFrame + f
+                guard micF < chunk.frameCount else { continue }
 
                 let micSample = chunk.samples[micF * chunk.channelCount + srcCh]
                 for ch in 0..<sysCh {

@@ -5,11 +5,11 @@ import VideoToolbox
 final class MovieFileWriter: @unchecked Sendable {
     private let writer: AVAssetWriter
     private let videoInput: AVAssetWriterInput
-    private let audioInput: AVAssetWriterInput
+    private var audioInput: AVAssetWriterInput?
     private var didStartSession = false
     private var didFinish = false
 
-    init(outputURL: URL, width: Int, height: Int, audioFormat: AudioStreamBasicDescription,
+    init(outputURL: URL, width: Int, height: Int, audioFormat: AudioStreamBasicDescription?,
          videoCodec: VideoCodec = .hevc) throws {
         if FileManager.default.fileExists(atPath: outputURL.path) {
             try FileManager.default.removeItem(at: outputURL)
@@ -51,22 +51,32 @@ final class MovieFileWriter: @unchecked Sendable {
         videoInput = AVAssetWriterInput(mediaType: .video, outputSettings: videoSettings)
         videoInput.expectsMediaDataInRealTime = true
 
-        let audioSettings: [String: Any] = [
-            AVFormatIDKey: kAudioFormatMPEG4AAC,
-            AVSampleRateKey: Int(audioFormat.mSampleRate),
-            AVNumberOfChannelsKey: Int(audioFormat.mChannelsPerFrame),
-            AVEncoderBitRateKey: 192_000
-        ]
-
-        audioInput = AVAssetWriterInput(mediaType: .audio, outputSettings: audioSettings)
+        // Always create audio input so mic-only recording works.
+        // When audioFormat is nil (mic-only mode) use a default format.
+        let audioSettings: [String: Any] = if let fmt = audioFormat {
+            [
+                AVFormatIDKey: kAudioFormatMPEG4AAC,
+                AVSampleRateKey: Int(fmt.mSampleRate),
+                AVNumberOfChannelsKey: Int(fmt.mChannelsPerFrame),
+                AVEncoderBitRateKey: 192_000
+            ]
+        } else {
+            [
+                AVFormatIDKey: kAudioFormatMPEG4AAC,
+                AVSampleRateKey: 44100,
+                AVNumberOfChannelsKey: 1,
+                AVEncoderBitRateKey: 128_000
+            ]
+        }
+        let audioInput = AVAssetWriterInput(mediaType: .audio, outputSettings: audioSettings)
         audioInput.expectsMediaDataInRealTime = true
+        if writer.canAdd(audioInput) {
+            writer.add(audioInput)
+        }
+        self.audioInput = audioInput
 
         if writer.canAdd(videoInput) {
             writer.add(videoInput)
-        }
-
-        if writer.canAdd(audioInput) {
-            writer.add(audioInput)
         }
     }
 
@@ -87,8 +97,8 @@ final class MovieFileWriter: @unchecked Sendable {
             guard videoInput.isReadyForMoreMediaData else { return }
             _ = videoInput.append(sampleBuffer)
         case .audio:
-            guard audioInput.isReadyForMoreMediaData else { return }
-            _ = audioInput.append(sampleBuffer)
+            guard let input = audioInput, input.isReadyForMoreMediaData else { return }
+            _ = input.append(sampleBuffer)
         default:
             break
         }
@@ -103,7 +113,7 @@ final class MovieFileWriter: @unchecked Sendable {
 
             didFinish = true
             videoInput.markAsFinished()
-            audioInput.markAsFinished()
+            audioInput?.markAsFinished()
 
             guard didStartSession else {
                 writer.cancelWriting()

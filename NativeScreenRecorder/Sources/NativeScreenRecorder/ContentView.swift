@@ -176,9 +176,9 @@ struct ContentView: View {
                 systemImage: "video.fill",
                 tint: .orange,
                 isOn: Binding(
-                    get: { store.audioMode == .globalSystem },
+                    get: { store.audioMode != .none },
                     set: { isOn in
-                        store.audioMode = isOn ? .globalSystem : .selectedApplication
+                        store.audioMode = isOn ? .globalSystem : .none
                     }
                 )
             )

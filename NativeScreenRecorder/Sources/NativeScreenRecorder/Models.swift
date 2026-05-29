@@ -1,6 +1,7 @@
 import Foundation
 
 enum AudioCaptureMode: String, CaseIterable, Identifiable {
+    case none
     case globalSystem
     case selectedApplication
 
@@ -8,6 +9,8 @@ enum AudioCaptureMode: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
+        case .none:
+            return "关闭"
         case .globalSystem:
             return "全局系统声音"
         case .selectedApplication:
@@ -17,6 +20,8 @@ enum AudioCaptureMode: String, CaseIterable, Identifiable {
 
     var detail: String {
         switch self {
+        case .none:
+            return "不录制系统音频。"
         case .globalSystem:
             return "录制整台 Mac 正在播放的系统音频，不改变当前扬声器或耳机。"
         case .selectedApplication:

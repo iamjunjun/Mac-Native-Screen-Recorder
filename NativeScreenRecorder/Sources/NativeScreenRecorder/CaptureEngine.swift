@@ -52,16 +52,16 @@ final class CaptureEngine: NSObject, @unchecked Sendable {
         }
 
         let filter = SCContentFilter(display: display, excludingApplications: [], exceptingWindows: [])
-        let tapTarget: ProcessTapTarget
+        let tapTarget: ProcessTapTarget?
         switch request.audioMode {
+        case .none:
+            tapTarget = nil
         case .globalSystem:
             tapTarget = .global(excludingCurrentProcess: true)
         case .selectedApplication:
             guard let pid = request.applicationProcessID else {
                 throw CaptureEngineError.noApplication
             }
-            // Multi-process browsers (Chrome, Edge, etc.) produce audio from
-            // sub-processes, not the main process. Discover all related PIDs.
             let audioPIDs = AudioProcessDiscovery.discoverAudioPIDs(forApplicationPID: pid)
             let pids = audioPIDs.isEmpty ? [pid] : audioPIDs
             tapTarget = .processes(pids: pids)
@@ -83,9 +83,6 @@ final class CaptureEngine: NSObject, @unchecked Sendable {
         configuration.pixelFormat = kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange
         configuration.scalesToFit = false
 
-        let audioCapture = ProcessTapAudioCapture(target: tapTarget)
-        let audioFormat = try audioCapture.prepare()
-
         let pointScale = CGFloat(pixelWidth) / CGFloat(display.width)
         let writerWidth: Int
         let writerHeight: Int
@@ -102,6 +99,24 @@ final class CaptureEngine: NSObject, @unchecked Sendable {
             configuration.height = pixelHeight
         }
 
+        var audioFormat: AudioStreamBasicDescription?
+        var audioCapture: ProcessTapAudioCapture?
+        let mixer = AudioMixer()
+
+        if request.audioMode != .none, let target = tapTarget {
+            let capture = ProcessTapAudioCapture(target: target)
+            audioFormat = try capture.prepare()
+            audioCapture = capture
+        }
+
+        if request.isMicrophoneEnabled {
+            let micGranted = await requestMicrophonePermission()
+            guard micGranted else {
+                throw CaptureEngineError.microphonePermissionDenied
+            }
+            try startMicrophoneCapture(mixer: mixer, audioFormat: audioFormat)
+        }
+
         let writer = try MovieFileWriter(
             outputURL: request.outputURL,
             width: writerWidth,
@@ -113,35 +128,26 @@ final class CaptureEngine: NSObject, @unchecked Sendable {
         let stream = SCStream(filter: filter, configuration: configuration, delegate: self)
         try stream.addStreamOutput(self, type: .screen, sampleHandlerQueue: sampleQueue)
 
-        let mixer = AudioMixer()
-        if request.isMicrophoneEnabled {
-            let micGranted = await requestMicrophonePermission()
-            guard micGranted else {
-                audioCapture.stop()
-                throw CaptureEngineError.microphonePermissionDenied
-            }
-            mixer.setSystemFormat(audioFormat)
-            try startMicrophoneCapture(matching: audioFormat, mixer: mixer)
-        }
-
         self.writer = writer
         self.stream = stream
         self.audioCapture = audioCapture
         self.audioMixer = request.isMicrophoneEnabled ? mixer : nil
 
-        audioCapture.onSampleBuffer = { [weak self] sampleBuffer in
-            guard let self else { return }
-            self.lastSystemAudioTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
-            let output = self.audioMixer?.mix(system: sampleBuffer) ?? sampleBuffer
-            self.writer?.append(output, mediaType: .audio)
+        if let capture = audioCapture {
+            capture.onSampleBuffer = { [weak self] sampleBuffer in
+                guard let self else { return }
+                self.lastSystemAudioTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
+                let output = self.audioMixer?.mix(system: sampleBuffer) ?? sampleBuffer
+                self.writer?.append(output, mediaType: .audio)
+            }
         }
 
         do {
             try await stream.startCapture()
-            try audioCapture.start()
+            try audioCapture?.start()
             isRecording = true
         } catch {
-            audioCapture.stop()
+            audioCapture?.stop()
             self.writer = nil
             self.stream = nil
             self.audioCapture = nil
@@ -211,15 +217,33 @@ extension CaptureEngine {
         return elapsed < 200_000_000  // within 200ms
     }
 
-    private func startMicrophoneCapture(matching audioFormat: AudioStreamBasicDescription, mixer: AudioMixer) throws {
+    private func startMicrophoneCapture(mixer: AudioMixer, audioFormat: AudioStreamBasicDescription?) throws {
         let engine = AVAudioEngine()
         let inputNode = engine.inputNode
 
         // Use mic native format; AudioMixer handles mono→stereo expansion
         let micFormat = inputNode.outputFormat(forBus: 0)
-        inputNode.installTap(onBus: 0, bufferSize: 1024, format: micFormat) { [weak self] micBuffer, _ in
+
+        // Build an ASBD from micFormat so AudioMixer can fall back to it in mic-only mode
+        var micASBD = AudioStreamBasicDescription()
+        micASBD.mSampleRate = micFormat.sampleRate
+        micASBD.mFormatID = kAudioFormatLinearPCM
+        micASBD.mFormatFlags = kAudioFormatFlagIsFloat | kAudioFormatFlagIsPacked
+        micASBD.mBytesPerPacket = UInt32(Int(micFormat.channelCount) * MemoryLayout<Float>.size)
+        micASBD.mFramesPerPacket = 1
+        micASBD.mBytesPerFrame = UInt32(Int(micFormat.channelCount) * MemoryLayout<Float>.size)
+        micASBD.mChannelsPerFrame = UInt32(micFormat.channelCount)
+        micASBD.mBitsPerChannel = 32
+        mixer.setMicFormat(micASBD)
+
+        // Also set system format when available (for mixed mode)
+        if let fmt = audioFormat {
+            mixer.setSystemFormat(fmt)
+        }
+
+        inputNode.installTap(onBus: 0, bufferSize: 1024, format: micFormat) { [weak self] micBuffer, audioTime in
             guard let self else { return }
-            mixer.enqueueMic(pcmBuffer: micBuffer)
+            mixer.enqueueMic(pcmBuffer: micBuffer, hostTime: audioTime.hostTime)
 
             // Dispatch off the realtime audio thread — CMSampleBuffer creation
             // and AVAssetWriter append must not happen on a realtime thread.

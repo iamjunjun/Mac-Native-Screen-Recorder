@@ -1,13 +1,12 @@
 # NativeScreenRecorder
 
-macOS 原生录屏应用。通过 ScreenCaptureKit + CoreAudio Process Tap 实现屏幕和音频录制，无需 BlackHole 等虚拟声卡。
+macOS 原生录屏应用。通过 ScreenCaptureKit 三轨架构实现屏幕和音频录制，无需 BlackHole 等虚拟声卡。
 
 ## 技术栈
 
-- Swift 6.0, SwiftUI, macOS 14.2+
-- ScreenCaptureKit (屏幕帧 + sourceRect 区域裁剪)
-- CoreAudio Process Tap (macOS 14.2+, 应用级音频捕获)
-- AVAssetWriter (H.264/HEVC MP4 封装)
+- Swift 6.0, SwiftUI, macOS 15.0+
+- ScreenCaptureKit (屏幕帧 + 系统音频 + 麦克风，三轨独立采集)
+- AVAssetWriter (H.264/HEVC + 双 AAC 音频轨道)
 - Swift Package Manager 构建
 
 ## 构建与打包
@@ -38,37 +37,36 @@ Sources/NativeScreenRecorder/
 ├── NativeScreenRecorderApp.swift    # @main 入口，.task 中刷新内容 + 延迟合并音频进程
 ├── ContentView.swift                # SwiftUI 界面，Modern 风格，毛玻璃背景，图标化分区
 ├── RecorderStore.swift              # @MainActor ObservableObject，所有 UI 状态 + 录制控制
-├── CaptureEngine.swift              # SCStream 管理 + AVAudioEngine 麦克风 + AudioMixer 集成
-├── AudioMixer.swift                 # PCM 音频混合器，系统音频+麦克风混音，tanh 软削波
-├── MovieFileWriter.swift            # AVAssetWriter MP4，H.264/HEVC 码率阶梯
+├── CaptureEngine.swift              # SCStream 三轨采集（.screen/.audio/.microphone）
+├── MovieFileWriter.swift            # AVAssetWriter MP4，双音频轨道（系统+麦克风）
 ├── Models.swift                     # AudioCaptureMode, CaptureMode, VideoCodec, RecordingRequest
-├── ProcessTapAudioCapture.swift     # CoreAudio Process Tap，聚合设备，音频回调->CMSampleBuffer
 ├── CoreAudioHelpers.swift           # checkOSStatus, CoreAudioError, audioObjectPropertyAddress
 ├── AudioProcessDiscovery.swift      # kAudioHardwarePropertyProcessObjectList 发现音频进程
 ├── AreaSelectionOverlayView.swift   # 全屏透明蒙层，拖拽选区，mouseDown/Dragged/Up，ESC取消
 └── RecordingAreaOverlay.swift       # 录制中虚线边框叠加层，sharingType=.none 排除录制
 ```
 
-### 数据流
+### 数据流（v2.6.0 三轨分离架构）
 
 ```
-SCStream(display filter) ──screen frames──> CaptureEngine ──CMSampleBuffer──> MovieFileWriter
-ProcessTapAudioCapture ──audio buffers──> CaptureEngine ──CMSampleBuffer──> MovieFileWriter
-AVAudioEngine(mic tap) ──PCM buffer──> AudioMixer ──CMSampleBuffer──> MovieFileWriter
-                                              ↑ system audio CMSampleBuffer
-                                              └── AVAssetWriter ──> .mp4
+SCStream ── .screen ──→ CMSampleBuffer ──→ MovieFileWriter (video track)
+         ── .audio ──→ CMSampleBuffer ──→ MovieFileWriter (systemAudio track)
+         ── .mic   ──→ CMSampleBuffer ──→ MovieFileWriter (microphone track)
+                                                        ↓
+                                                    .mp4 输出
 ```
 
-- 系统音频通过 ProcessTap 回调驱动写入
-- 麦克风通过 AVAudioEngine inputNode installTap 捕获，memcpy 到 AudioMixer 预分配缓冲区
-- AudioMixer.mix(system:) 混音后输出；当系统音频静默时，makeMicOnlyCMSampleBuffer() 单独输出麦克风
+- 系统音频：`configuration.capturesAudio = true`，SCStream `.audio` 输出
+- 麦克风：`configuration.captureMicrophone = true`（macOS 15+），SCStream `.microphone` 输出
+- 两路音频各自独立 AAC 编码，AVAssetWriter 自动同步，不做任何混合
+- 无 AVAudioEngine、无 ProcessTap、无手动 PCM 混音
 
 ### 录制模式
 
 - **全屏**: `configuration.width/height = mode.pixelWidth/pixelHeight`（CGDisplayCopyDisplayMode 取物理像素）
 - **区域**: `configuration.sourceRect` (Quartz 坐标) + `configuration.width/height = 裁剪后像素尺寸`
-- **声音**: 全局系统声音 / 指定应用声音 (ProcessTapAudioCapture)
-- **麦克风**: 开关控制，与系统音频混音为单条音轨
+- **声音**: 全局系统声音 / 指定应用声音 (SCStream `.audio`)
+- **麦克风**: 开关控制，SCStream `.microphone` 独立轨道
 
 ## 关键设计决策与坑
 
@@ -95,46 +93,26 @@ CoreAudio 进程列表(`discoverRunningAudioProcesses`) 延迟 500ms 在 `mergeA
 - 像素格式: `kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange` ('420v')
 - `scalesToFit = false`（不做内部缩放）
 - HEVC vs H.264 码率阶梯（按像素数分档），B-frames 开启
+- 双 AAC 音频轨道：系统音频 192kbps / 麦克风 128kbps
 
 ### 7. 录制区域虚线框
 - 颜色: #CACACA
 - 排除录制: `window.sharingType = .none`
 
-### 8. AudioMixer 线程安全与 AVAudioPCMBuffer 生命周期
-`AVAudioPCMBuffer` 仅在 tap 回调内有效，回调返回后底层内存被释放。不能直接存储引用。
-**修复**: `enqueueMic` 在 realtime 线程上立即将 float samples 拷贝到预分配的 `UnsafeMutablePointer<Float>` 缓冲区。
-后续 `makeMicOnlyCMSampleBuffer()` 和 `mix(system:)` 在锁内将数据再拷贝为 `[Float]`，防止 `enqueueMic` 并发 realloc 导致 use-after-free。
-
-### 9. mach_timebase 除以零崩溃
-`mach_timebase_info()` 返回全零结构体（denom=0）。在 Swift debug 模式下，`UInt64` 除以零触发 `_assertionFailure` → SIGTRAP。
-**修复**: 先检查 `if machTimebase.denom == 0 { mach_timebase_info(&machTimebase) }`，再计算 `nanos = now * numer / denom`。
-
-### 10. 麦克风采样率不匹配
-`makeMicOnlyCMSampleBuffer` 曾以系统音频采样率（如 48000Hz）输出麦克风数据，但 Mac 内置麦可能是 44100Hz，导致音调偏移（变声）。
-**修复**: 存储 `micSampleRate`，输出时使用麦克风实际采样率。
-
-### 11. 麦克风回声问题
-录制时如果同时用扬声器播放系统声音，麦克风会录到扬声器输出的声音，造成回声。
-**建议**: UI 中提示用户佩戴耳机。
-
-### 12. 浏览器多进程音频发现
+### 8. 浏览器多进程音频发现
 Chrome/Edge 等浏览器将音频放在子进程中，Safari 的 WebKit.GPU 是 XPC 服务（不在主应用 bundle 内）。
 `AudioProcessDiscovery.discoverAudioPIDs(forApplicationPID:)` 先用 bundle 路径前缀匹配（Chrome 类），再用进程名模糊匹配（Safari 类）。
 
-### 13. [未解决] 混合录制时音频失真（闷音）
-**现象**: 同时开启麦克风和系统声音录制，单独录任一路均正常。但一旦系统开始播放音频，整个录制输出出现明显失真/闷音。
+### 9. 三轨分离架构（v2.6.0）
+**背景**: 之前使用 AudioMixer 手动混合系统音频和麦克风到单条音轨，导致格式描述不一致、AAC 编码器状态重置、混合时失真（闷音）。尝试过 AVAudioEngine 混音方案，但 `engine.connect()` 在格式不兼容时抛出无法被 Swift 捕获的 NSException。
 
-**可能原因**:
-1. **PCM→AAC 编码器兼容性**: `makeCMSampleBuffer` 创建的交错 Float32 PCM 格式与 AVAssetWriter AAC 编码器的期望格式不完全匹配。
-2. **数字削波**: Process Tap 捕获的系统音频信号可能在 0dBFS 附近，乘以 0.6 后叠加 0.4×麦克风信号，组合后持续触发限幅器，产生可闻失真。
-3. **时间域对齐**: 系统音频（Process Tap IOProc）和麦克风（AVAudioEngine tap）虽然都用 `mach_absolute_time()` 时基，但两路到达 AAC 编码器的时间可能存在微秒级错位。
-4. **AVAssetWriterInput 格式漂移**: 每次 `mix()` 输出一个新的 CMSampleBuffer（全新 FormatDescription），编码器可能频繁重建内部状态。
+**方案**: 彻底移除手动混音，使用 SCStream 原生三轨输出（`.screen`/`.audio`/`.microphone`），MovieFileWriter 支持双音频轨道，各自独立 AAC 编码。
 
-**建议排查方向**:
-- 移除硬限幅器，改用浮点原生值输出，在后期处理中调节电平
-- 验证 Process Tap 原始 ASBD 的 `mFormatFlags`，确保 `makeCMSampleBuffer` 输出完全匹配
-- 尝试直接修改原始 CMSampleBuffer 的 mMutableData 而非创建新 buffer
-- 改用 `AVAudioMixer` 或 `AVMutableAudioMix` 等 AVFoundation 原生混音接口
+**注意**: `captureMicrophone` 和 `.microphone` 输出类型需要 macOS 15.0+。
+
+### 10. 麦克风回声问题
+录制时如果同时用扬声器播放系统声音，麦克风会录到扬声器输出的声音，造成回声。
+**建议**: UI 中提示用户佩戴耳机。
 
 ## 版本
 
@@ -146,8 +124,8 @@ Chrome/Edge 等浏览器将音频放在子进程中，Safari 的 WebKit.GPU 是 
 - **v2.5**: 修复混音采样率对齐误差 + 麦克风单独录制崩溃问题
 - **v2.5.1**: 修复混音循环内采样率转换误差 — 改用简单递增索引
 - **v2.5.2**: 修复混音增益过高导致系统音频压制麦克风 — 改用加法混合替代 tanhf
-- **v2.5.4** (当前):
-  - 修复 srcCh 声道选择取到右声道（srcCh = min(ch-1, out-1) → 始终取 0）
-  - 修复 mix() 输出格式不统一（有/无混音时交替两种格式）
-  - 混音增益调整 + 硬限幅保护
-  - **未解决**: 混合录制失真的问题仍需排查
+- **v2.5.4**: 修复声道选择 + 格式统一 + 削波限幅（混音失真仍未解决）
+- **v2.6.0** (当前): **三轨分离架构** — 彻底移除手动混音，SCStream 三轨独立采集+独立编码
+  - 删除 AudioEngineMixer.swift、AudioMixer.swift、ProcessTapAudioCapture.swift
+  - MovieFileWriter 支持双 AAC 音频轨道
+  - 最低系统要求提升至 macOS 15.0

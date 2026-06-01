@@ -2,14 +2,22 @@ import AVFoundation
 import Foundation
 import VideoToolbox
 
+enum AudioTrack {
+    case systemAudio
+    case microphone
+}
+
 final class MovieFileWriter: @unchecked Sendable {
     private let writer: AVAssetWriter
     private let videoInput: AVAssetWriterInput
-    private var audioInput: AVAssetWriterInput?
+    private var systemAudioInput: AVAssetWriterInput?
+    private var microphoneInput: AVAssetWriterInput?
     private var didStartSession = false
     private var didFinish = false
 
-    init(outputURL: URL, width: Int, height: Int, audioFormat: AudioStreamBasicDescription?,
+    init(outputURL: URL, width: Int, height: Int,
+         systemAudioFormat: AudioStreamBasicDescription? = nil,
+         microphoneFormat: AudioStreamBasicDescription? = nil,
          videoCodec: VideoCodec = .hevc) throws {
         if FileManager.default.fileExists(atPath: outputURL.path) {
             try FileManager.default.removeItem(at: outputURL)
@@ -51,29 +59,33 @@ final class MovieFileWriter: @unchecked Sendable {
         videoInput = AVAssetWriterInput(mediaType: .video, outputSettings: videoSettings)
         videoInput.expectsMediaDataInRealTime = true
 
-        // Always create audio input so mic-only recording works.
-        // When audioFormat is nil (mic-only mode) use a default format.
-        let audioSettings: [String: Any] = if let fmt = audioFormat {
-            [
+        // System audio track
+        if let fmt = systemAudioFormat {
+            let settings: [String: Any] = [
                 AVFormatIDKey: kAudioFormatMPEG4AAC,
                 AVSampleRateKey: Int(fmt.mSampleRate),
                 AVNumberOfChannelsKey: Int(fmt.mChannelsPerFrame),
                 AVEncoderBitRateKey: 192_000
             ]
-        } else {
-            [
+            let input = AVAssetWriterInput(mediaType: .audio, outputSettings: settings)
+            input.expectsMediaDataInRealTime = true
+            if writer.canAdd(input) { writer.add(input) }
+            systemAudioInput = input
+        }
+
+        // Microphone track
+        if let fmt = microphoneFormat {
+            let settings: [String: Any] = [
                 AVFormatIDKey: kAudioFormatMPEG4AAC,
-                AVSampleRateKey: 44100,
-                AVNumberOfChannelsKey: 1,
+                AVSampleRateKey: Int(fmt.mSampleRate),
+                AVNumberOfChannelsKey: Int(fmt.mChannelsPerFrame),
                 AVEncoderBitRateKey: 128_000
             ]
+            let input = AVAssetWriterInput(mediaType: .audio, outputSettings: settings)
+            input.expectsMediaDataInRealTime = true
+            if writer.canAdd(input) { writer.add(input) }
+            microphoneInput = input
         }
-        let audioInput = AVAssetWriterInput(mediaType: .audio, outputSettings: audioSettings)
-        audioInput.expectsMediaDataInRealTime = true
-        if writer.canAdd(audioInput) {
-            writer.add(audioInput)
-        }
-        self.audioInput = audioInput
 
         if writer.canAdd(videoInput) {
             writer.add(videoInput)
@@ -85,9 +97,6 @@ final class MovieFileWriter: @unchecked Sendable {
         guard CMSampleBufferDataIsReady(sampleBuffer) else { return }
 
         if !didStartSession {
-            // Allow the first buffer of any media type to start the session.
-            // All timestamps are in the mach_absolute_time() domain, so they
-            // are guaranteed to be monotonically increasing and >= session start.
             let startTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
             guard writer.startWriting() else { return }
             writer.startSession(atSourceTime: startTime)
@@ -99,11 +108,32 @@ final class MovieFileWriter: @unchecked Sendable {
             guard videoInput.isReadyForMoreMediaData else { return }
             _ = videoInput.append(sampleBuffer)
         case .audio:
-            guard let input = audioInput, input.isReadyForMoreMediaData else { return }
+            guard let input = systemAudioInput, input.isReadyForMoreMediaData else { return }
             _ = input.append(sampleBuffer)
         default:
             break
         }
+    }
+
+    func append(_ sampleBuffer: CMSampleBuffer, to track: AudioTrack) {
+        guard !didFinish else { return }
+        guard CMSampleBufferDataIsReady(sampleBuffer) else { return }
+
+        if !didStartSession {
+            let startTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
+            guard writer.startWriting() else { return }
+            writer.startSession(atSourceTime: startTime)
+            didStartSession = true
+        }
+
+        let input: AVAssetWriterInput?
+        switch track {
+        case .systemAudio:  input = systemAudioInput
+        case .microphone:   input = microphoneInput
+        }
+
+        guard let input, input.isReadyForMoreMediaData else { return }
+        _ = input.append(sampleBuffer)
     }
 
     func finish() async throws {
@@ -115,7 +145,8 @@ final class MovieFileWriter: @unchecked Sendable {
 
             didFinish = true
             videoInput.markAsFinished()
-            audioInput?.markAsFinished()
+            systemAudioInput?.markAsFinished()
+            microphoneInput?.markAsFinished()
 
             guard didStartSession else {
                 writer.cancelWriting()

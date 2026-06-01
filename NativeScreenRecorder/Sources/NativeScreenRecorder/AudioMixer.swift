@@ -2,22 +2,32 @@
 import CoreMedia
 import os
 
+private let df = DateFormatter()
+private func debugLog(_ message: String) {
+    df.dateFormat = "HH:mm:ss.SSS"
+    let ts = df.string(from: Date())
+    fputs("\(ts) AudioMixer: \(message)\n", stderr)
+}
+
 final class AudioMixer: @unchecked Sendable {
     private let lock = OSAllocatedUnfairLock()
     private var systemFormat: AudioStreamBasicDescription?
     private var micFormat: AudioStreamBasicDescription?
-    private var machTimebase = mach_timebase_info()
 
-    // Time-stamped mic chunks for time-aligned mixing
+    // Mic audio chunks — FIFO queue consumed by mix() and makeMicOnlyCMSampleBuffer.
+    // hostTime is only used for mic-only PTS generation (mach_absolute_time domain).
     private struct MicChunk {
-        let samples: [Float]  // interleaved
+        let samples: [Float]
         let frameCount: Int
         let channelCount: Int
-        let hostTime: UInt64  // mach_absolute_time of first sample
         let sampleRate: Float64
+        let hostTime: UInt64  // mach_absolute_time of first sample
     }
     private var micChunks: [MicChunk] = []
-    private var nextMicOnlyIndex = 0
+
+    // Read cursor across all paths (shared between mix and mic-only).
+    // Rebases to offset within first remaining chunk after trimming.
+    private var consumedMicFrames: Int = 0
 
     deinit {}
 
@@ -29,16 +39,15 @@ final class AudioMixer: @unchecked Sendable {
         lock.withLock { micFormat = format }
     }
 
-    /// Must be called on the realtime audio thread (AVAudioEngine tap callback).
-    /// Copies mic float samples immediately — the buffer is invalid after return.
-    /// `hostTime` is the mach_absolute_time of the first sample (from AVAudioTime.hostTime).
+    // MARK: - Enqueue (realtime audio thread)
+
     func enqueueMic(pcmBuffer: AVAudioPCMBuffer, hostTime: UInt64) {
         let frames = Int(pcmBuffer.frameLength)
         let channels = Int(pcmBuffer.format.channelCount)
         let count = frames * channels
         guard count > 0, let src = pcmBuffer.floatChannelData else { return }
 
-        let samples: [Float] = { () -> [Float] in
+        let samples: [Float] = {
             var s = [Float](repeating: 0, count: count)
             for ch in 0..<channels {
                 let channelData = src[ch]
@@ -54,79 +63,65 @@ final class AudioMixer: @unchecked Sendable {
                 samples: samples,
                 frameCount: frames,
                 channelCount: channels,
-                hostTime: hostTime,
-                sampleRate: pcmBuffer.format.sampleRate
+                sampleRate: pcmBuffer.format.sampleRate,
+                hostTime: hostTime
             ))
-            trimOldChunks()
+            debugLog("enqueueMic: frames=\(frames) channels=\(channels) chunkCount=\(micChunks.count)")
         }
     }
 
-    private func trimOldChunks() {
-        if machTimebase.denom == 0 { mach_timebase_info(&machTimebase) }
-        let numer = UInt64(machTimebase.numer)
-        let denom = UInt64(machTimebase.denom)
-        let now = mach_absolute_time()
-        let nowNanos = Int64(now * numer / denom)
-        let maxAge: Int64 = 5_000_000_000  // 5 seconds
+    // MARK: - Mic-only path
 
-        var removed = 0
-        while let first = micChunks.first {
-            let firstNanos = Int64(first.hostTime * numer / denom)
-            if nowNanos - firstNanos > maxAge {
-                micChunks.removeFirst()
-                removed += 1
-            } else {
-                break
-            }
-        }
-        nextMicOnlyIndex = max(0, nextMicOnlyIndex - removed)
-    }
-
-    /// Generate a CMSampleBuffer from mic-only audio (system = silence).
-    /// Consumes chunks sequentially. Skips chunks older than 500ms — those
-    /// were from a period when system audio was active and were already mixed.
     func makeMicOnlyCMSampleBuffer() -> CMSampleBuffer? {
-        // Fall back to micFormat when systemFormat is not set (mic-only mode)
-        let (fmt, hasFormat) = lock.withLock { (systemFormat ?? micFormat, systemFormat != nil || micFormat != nil) }
-        guard hasFormat, let fmt = fmt else { return nil }
-        let outCh = Int(fmt.mChannelsPerFrame)
+        let hasFormat = lock.withLock { systemFormat != nil || micFormat != nil }
+        guard hasFormat else { return nil }
+        // Always output mono (1 channel) — matches MovieFileWriter's AAC fallback.
+        let outCh = 1
 
         if machTimebase.denom == 0 { mach_timebase_info(&machTimebase) }
         let numer = UInt64(machTimebase.numer)
         let denom = UInt64(machTimebase.denom)
-        let now = mach_absolute_time()
-        let nowNanos = Int64(now * numer / denom)
-        let maxAge: Int64 = 500_000_000  // 500ms — skip chunks from mix period
 
-        let snapshot: (samples: [Float], frames: Int, hostTime: UInt64, sampleRate: Float64)?
+        let snapshot: (samples: [Float], frames: Int, sampleRate: Float64, hostTime: UInt64)?
         snapshot = lock.withLock {
-            while nextMicOnlyIndex < micChunks.count {
-                let chunk = micChunks[nextMicOnlyIndex]
-                nextMicOnlyIndex += 1
-                let chunkNanos = Int64(chunk.hostTime * numer / denom)
-                guard chunk.frameCount > 0 else { continue }
-                // Skip chunks that are too old (already mixed into system audio)
-                if nowNanos - chunkNanos > maxAge { continue }
-                // Skip chunks from more than 2s in the future (clock skew guard)
-                if chunkNanos - nowNanos > 2_000_000_000 { continue }
-
-                let outCount = chunk.frameCount * outCh
-                var out = [Float](repeating: 0, count: outCount)
-                let srcCh = min(chunk.channelCount - 1, outCh - 1)
-                for f in 0..<chunk.frameCount {
-                    for ch in 0..<outCh {
-                        out[f * outCh + ch] = chunk.samples[f * chunk.channelCount + srcCh]
+            var remaining = consumedMicFrames
+            for chunk in micChunks {
+                if remaining < chunk.frameCount {
+                    let startFrame = remaining
+                    let availFrames = chunk.frameCount - startFrame
+                    let outCount = availFrames * outCh
+                    var out = [Float](repeating: 0, count: outCount)
+                    let srcCh = 0  // always use first mic channel (primary)
+                    for f in 0..<availFrames {
+                        for ch in 0..<outCh {
+                            let micVal = chunk.samples[(startFrame + f) * chunk.channelCount + srcCh]
+                            out[f * outCh + ch] = micVal
+                        }
                     }
+                    return (out, availFrames, chunk.sampleRate, chunk.hostTime)
                 }
-                return (out, chunk.frameCount, chunk.hostTime, chunk.sampleRate)
+                remaining -= chunk.frameCount
             }
             return nil
         }
 
-        guard let (samples, frames, hostTime, sampleRate) = snapshot else { return nil }
+        guard let (samples, frames, sampleRate, hostTime) = snapshot else {
+            debugLog("makeMicOnlyCMSampleBuffer: returning nil")
+            return nil
+        }
 
-        let nanos = hostTime * UInt64(numer) / UInt64(denom)
+        // Use hostTime (mach_absolute_time domain) for PTS to match
+        // video and system audio timestamps — AVAssetWriter requires
+        // all buffer PTS >= session start time.
+        let nanos = hostTime * numer / denom
         let ts = CMTime(value: CMTimeValue(nanos), timescale: 1_000_000_000)
+
+        lock.withLock {
+            consumedMicFrames += frames
+            trimConsumedChunks()
+        }
+
+        debugLog("makeMicOnlyCMSampleBuffer: returning frames=\(frames) pts=\(nanos)")
 
         return makeCMSampleBuffer(
             samples: samples, frames: frames, channels: outCh,
@@ -134,9 +129,8 @@ final class AudioMixer: @unchecked Sendable {
         )
     }
 
-    /// Mix system audio with time-aligned mic audio.
-    /// Each mic chunk has a hostTime; we find chunks that overlap in time
-    /// with the system buffer and mix at the correct sample offsets.
+    // MARK: - Mix path (system audio + mic)
+
     func mix(system sampleBuffer: CMSampleBuffer) -> CMSampleBuffer {
         guard let sysASBD = asbd(of: sampleBuffer) else { return sampleBuffer }
         let sysFrames = Int(CMSampleBufferGetNumSamples(sampleBuffer))
@@ -145,55 +139,107 @@ final class AudioMixer: @unchecked Sendable {
 
         guard var sysSamples = readFloatSamples(sampleBuffer, asbd: sysASBD) else { return sampleBuffer }
 
-        if machTimebase.denom == 0 { mach_timebase_info(&machTimebase) }
-        let numer = UInt64(machTimebase.numer)
-        let denom = UInt64(machTimebase.denom)
+        let (mixPlan, totalMicFramesConsumed) = lock.withLock { () -> ([(chunkIdx: Int, startFrame: Int, mixSysFrames: Int, srRatio: Double, chunk: MicChunk)]?, Int) in
+            var remaining = consumedMicFrames
+            var chunkIdx = 0
+            var plan: [(Int, Int, Int, Double, MicChunk)] = []
+            var totalConsumed = 0
+            var neededSysFrames = sysFrames
 
-        let sysPTS = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
-        let sysStartNanos = Int64(CMTimeConvertScale(sysPTS, timescale: 1_000_000_000, method: .roundAwayFromZero).value)
-        let sysEndNanos = sysStartNanos + Int64(Double(sysFrames) / sysSR * 1_000_000_000)
+            while neededSysFrames > 0 && chunkIdx < micChunks.count {
+                let chunk = micChunks[chunkIdx]
+                let availMicFrames = chunk.frameCount - max(0, remaining)
 
-        let chunks = lock.withLock { micChunks }
+                if availMicFrames <= 0 {
+                    remaining -= chunk.frameCount
+                    chunkIdx += 1
+                    continue
+                }
 
-        for chunk in chunks {
-            let chunkStartNanos = Int64(chunk.hostTime * numer / denom)
-            let chunkEndNanos = chunkStartNanos + Int64(Double(chunk.frameCount) / chunk.sampleRate * 1_000_000_000)
+                let startFrame = max(0, remaining)
+                let srRatio = Double(chunk.sampleRate) / sysSR
 
-            let overlapStart = max(sysStartNanos, chunkStartNanos)
-            let overlapEnd = min(sysEndNanos, chunkEndNanos)
-            guard overlapStart < overlapEnd else { continue }
+                let chunkSysFrames = Int(Double(availMicFrames) / srRatio)
+                let take = min(chunkSysFrames, neededSysFrames)
+                if take <= 0 { break }
 
-            // Frame offsets within each buffer for the overlap region
-            let micStartFrame = Int(Double(overlapStart - chunkStartNanos) / 1_000_000_000 * chunk.sampleRate + 0.5)
-            let sysStartFrame = Int(Double(overlapStart - sysStartNanos) / 1_000_000_000 * sysSR + 0.5)
-            let mixFrames = Int(Double(overlapEnd - overlapStart) / 1_000_000_000 * sysSR + 0.5)
+                plan.append((chunkIdx, startFrame, take, srRatio, chunk))
+                let micConsumed = Int(Double(take) * srRatio + 0.5)
+                totalConsumed += micConsumed
+                neededSysFrames -= take
 
-            guard sysStartFrame >= 0, sysStartFrame < sysFrames else { continue }
-            guard micStartFrame >= 0, micStartFrame < chunk.frameCount else { continue }
-
-            let srcCh = min(chunk.channelCount - 1, sysCh - 1)
-            for f in 0..<mixFrames {
-                let sysF = sysStartFrame + f
-                guard sysF < sysFrames else { break }
-                let micF = micStartFrame + f
-                guard micF < chunk.frameCount else { continue }
-
-                let micSample = chunk.samples[micF * chunk.channelCount + srcCh]
-                let mixGain: Float = 0.5
-                for ch in 0..<sysCh {
-                    let outIdx = sysF * sysCh + ch
-                    sysSamples[outIdx] = sysSamples[outIdx] + micSample * mixGain
+                remaining += micConsumed
+                if remaining >= chunk.frameCount {
+                    remaining -= chunk.frameCount
+                    chunkIdx += 1
                 }
             }
+
+            if plan.isEmpty { return (nil, 0) }
+
+            let newConsumed = consumedMicFrames + totalConsumed
+            consumedMicFrames = newConsumed
+
+            return (plan, newConsumed)
         }
 
+        let sysPTS = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
+
+        if let plan = mixPlan {
+            debugLog("mix: sysFrames=\(sysFrames) sysSR=\(sysSR) micConsumedFrames=\(totalMicFramesConsumed) planItems=\(plan.count)")
+
+            var sysOffset = 0
+            for (_, startFrame, mixSysFrames, srRatio, chunk) in plan {
+                let srcCh = 0  // always use first mic channel (primary)
+                for f in 0..<mixSysFrames {
+                    let sysF = sysOffset + f
+                    guard sysF < sysFrames else { break }
+                    let micF = startFrame + Int(Double(f) * srRatio + 0.5)
+                    guard micF >= 0, micF < chunk.frameCount else { continue }
+
+                    let micSample = chunk.samples[micF * chunk.channelCount + srcCh]
+                    for ch in 0..<sysCh {
+                        let outIdx = sysF * sysCh + ch
+                        // Reduce system slightly and add mic. Keep total gain ≤ 1.0
+                        // and clamp to [-1, 1] to prevent digital clipping.
+                        let mixed = sysSamples[outIdx] * 0.6 + micSample * 0.4
+                        sysSamples[outIdx] = max(-1.0, min(1.0, mixed))
+                    }
+                }
+                sysOffset += mixSysFrames
+            }
+            lock.withLock { trimConsumedChunks() }
+        } else {
+            debugLog("mix: no mic data available for this sys buffer")
+        }
+
+        // Always output through makeCMSampleBuffer for a consistent format.
+        // Returning the original buffer (which may have different format flags)
+        // causes AVAssetWriter to reinitialize the AAC encoder, creating glitches.
         return makeCMSampleBuffer(
             samples: sysSamples, frames: sysFrames, channels: sysCh,
             sampleRate: sysSR, timing: sysPTS
         ) ?? sampleBuffer
     }
 
+    // MARK: - Chunk cleanup
+
+    private func trimConsumedChunks() {
+        var remaining = consumedMicFrames
+        while let first = micChunks.first {
+            if remaining >= first.frameCount {
+                remaining -= first.frameCount
+                micChunks.removeFirst()
+            } else {
+                break
+            }
+        }
+        consumedMicFrames = remaining
+    }
+
     // MARK: - Helpers
+
+    private var machTimebase = mach_timebase_info()
 
     private func asbd(of sb: CMSampleBuffer) -> AudioStreamBasicDescription? {
         guard let fd = CMSampleBufferGetFormatDescription(sb) else { return nil }

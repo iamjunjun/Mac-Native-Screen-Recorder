@@ -121,9 +121,33 @@ CoreAudio 进程列表(`discoverRunningAudioProcesses`) 延迟 500ms 在 `mergeA
 Chrome/Edge 等浏览器将音频放在子进程中，Safari 的 WebKit.GPU 是 XPC 服务（不在主应用 bundle 内）。
 `AudioProcessDiscovery.discoverAudioPIDs(forApplicationPID:)` 先用 bundle 路径前缀匹配（Chrome 类），再用进程名模糊匹配（Safari 类）。
 
+### 13. [未解决] 混合录制时音频失真（闷音）
+**现象**: 同时开启麦克风和系统声音录制，单独录任一路均正常。但一旦系统开始播放音频，整个录制输出出现明显失真/闷音。
+
+**可能原因**:
+1. **PCM→AAC 编码器兼容性**: `makeCMSampleBuffer` 创建的交错 Float32 PCM 格式与 AVAssetWriter AAC 编码器的期望格式不完全匹配。
+2. **数字削波**: Process Tap 捕获的系统音频信号可能在 0dBFS 附近，乘以 0.6 后叠加 0.4×麦克风信号，组合后持续触发限幅器，产生可闻失真。
+3. **时间域对齐**: 系统音频（Process Tap IOProc）和麦克风（AVAudioEngine tap）虽然都用 `mach_absolute_time()` 时基，但两路到达 AAC 编码器的时间可能存在微秒级错位。
+4. **AVAssetWriterInput 格式漂移**: 每次 `mix()` 输出一个新的 CMSampleBuffer（全新 FormatDescription），编码器可能频繁重建内部状态。
+
+**建议排查方向**:
+- 移除硬限幅器，改用浮点原生值输出，在后期处理中调节电平
+- 验证 Process Tap 原始 ASBD 的 `mFormatFlags`，确保 `makeCMSampleBuffer` 输出完全匹配
+- 尝试直接修改原始 CMSampleBuffer 的 mMutableData 而非创建新 buffer
+- 改用 `AVAudioMixer` 或 `AVMutableAudioMix` 等 AVFoundation 原生混音接口
+
 ## 版本
 
 - **v2.0**: 系统音频录制功能（ProcessTapAudioCapture）
 - **v2.1**: 区域录制、HEVC 编码、浏览器音频发现、崩溃修复
 - **v2.2**: 麦克风混音录制（AudioMixer），支持系统音频+麦克风混合输出
-- **v2.3** (当前): UI 重新设计，Modern 风格，毛玻璃背景，图标化分区，窗口可调大小
+- **v2.3**: UI 重新设计，Modern 风格，毛玻璃背景，图标化分区，窗口可调大小
+- **v2.4**: UI 继续优化 — hero 控制栏、玻璃面板、新布局
+- **v2.5**: 修复混音采样率对齐误差 + 麦克风单独录制崩溃问题
+- **v2.5.1**: 修复混音循环内采样率转换误差 — 改用简单递增索引
+- **v2.5.2**: 修复混音增益过高导致系统音频压制麦克风 — 改用加法混合替代 tanhf
+- **v2.5.4** (当前):
+  - 修复 srcCh 声道选择取到右声道（srcCh = min(ch-1, out-1) → 始终取 0）
+  - 修复 mix() 输出格式不统一（有/无混音时交替两种格式）
+  - 混音增益调整 + 硬限幅保护
+  - **未解决**: 混合录制失真的问题仍需排查

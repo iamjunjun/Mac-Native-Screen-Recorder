@@ -85,7 +85,9 @@ final class MovieFileWriter: @unchecked Sendable {
         guard CMSampleBufferDataIsReady(sampleBuffer) else { return }
 
         if !didStartSession {
-            guard mediaType == .video else { return }
+            // Allow the first buffer of any media type to start the session.
+            // All timestamps are in the mach_absolute_time() domain, so they
+            // are guaranteed to be monotonically increasing and >= session start.
             let startTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
             guard writer.startWriting() else { return }
             writer.startSession(atSourceTime: startTime)

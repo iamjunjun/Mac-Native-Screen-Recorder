@@ -1,5 +1,7 @@
 # Mac 原生录屏软件
 
+**中文** | [English](./README_EN.md)
+
 一款纯粹的 macOS 原生录屏工具。无需安装任何第三方虚拟声卡（如 BlackHole），不改变系统音频路由，直接利用 ScreenCaptureKit 和 Core Audio 底层 API 实现屏幕、系统声音、麦克风的独立录制。
 
 ## 软件截图

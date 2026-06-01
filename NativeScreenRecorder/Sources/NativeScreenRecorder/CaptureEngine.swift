@@ -1,4 +1,5 @@
 import AVFoundation
+import CoreAudio
 import Foundation
 import ScreenCaptureKit
 
@@ -8,6 +9,7 @@ enum CaptureEngineError: LocalizedError {
     case alreadyRecording
     case notRecording
     case streamStopped(Error?)
+    case processTapUnavailable
     case microphonePermissionDenied
 
     var errorDescription: String? {
@@ -22,6 +24,8 @@ enum CaptureEngineError: LocalizedError {
             return "当前没有正在进行的录制。"
         case .streamStopped(let error):
             return error?.localizedDescription ?? "录制流已停止。"
+        case .processTapUnavailable:
+            return "Core Audio Process Tap 需要 macOS 14.2 或更新版本。"
         case .microphonePermissionDenied:
             return "麦克风权限未授权，请在系统设置 → 隐私与安全性 → 麦克风中允许本应用。"
         }
@@ -32,6 +36,7 @@ final class CaptureEngine: NSObject, @unchecked Sendable {
     private let sampleQueue = DispatchQueue(label: "NativeScreenRecorder.ScreenCaptureSamples")
     private var stream: SCStream?
     private var writer: MovieFileWriter?
+    private var processTap: ProcessTapAudioCapture?
     private var isRecording = false
 
     func start(request: RecordingRequest) async throws {
@@ -42,18 +47,8 @@ final class CaptureEngine: NSObject, @unchecked Sendable {
             throw CaptureEngineError.noDisplay
         }
 
-        // Build content filter
-        let filter: SCContentFilter
-        switch request.audioMode {
-        case .none, .globalSystem:
-            filter = SCContentFilter(display: display, excludingApplications: [], exceptingWindows: [])
-        case .selectedApplication:
-            guard let pid = request.applicationProcessID,
-                  let app = content.applications.first(where: { $0.processID == pid }) else {
-                throw CaptureEngineError.noApplication
-            }
-            filter = SCContentFilter(display: display, excludingApplications: [app], exceptingWindows: [])
-        }
+        // Build content filter — always capture all windows
+        let filter = SCContentFilter(display: display, excludingApplications: [], exceptingWindows: [])
 
         let displayID = display.displayID
         guard let mode = CGDisplayCopyDisplayMode(displayID) else {
@@ -68,7 +63,7 @@ final class CaptureEngine: NSObject, @unchecked Sendable {
         configuration.queueDepth = 6
         configuration.showsCursor = true
         configuration.excludesCurrentProcessAudio = true
-        configuration.pixelFormat = kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange
+        configuration.pixelFormat = kCVPixelFormatType_32BGRA
         configuration.scalesToFit = false
 
         let pointScale = CGFloat(pixelWidth) / CGFloat(display.width)
@@ -87,16 +82,36 @@ final class CaptureEngine: NSObject, @unchecked Sendable {
             configuration.height = pixelHeight
         }
 
-        // Audio setup
-        let enableSystemAudio = request.audioMode != .none
+        // Audio mode routing
         let enableMic = request.isMicrophoneEnabled
+        let useSCStreamAudio: Bool
+        var tapCapture: ProcessTapAudioCapture?
+
+        switch request.audioMode {
+        case .none:
+            useSCStreamAudio = false
+        case .globalSystem:
+            useSCStreamAudio = true
+        case .selectedApplication:
+            guard let pid = request.applicationProcessID,
+                  content.applications.first(where: { $0.processID == pid }) != nil else {
+                throw CaptureEngineError.noApplication
+            }
+            let audioPIDs = AudioProcessDiscovery.discoverAudioPIDs(forApplicationPID: pid)
+            let pids = audioPIDs.isEmpty ? [pid] : audioPIDs
+            let capture = ProcessTapAudioCapture(target: .processes(pids: pids))
+            _ = try capture.prepare()
+            tapCapture = capture
+            useSCStreamAudio = false
+        }
 
         if enableMic {
             let granted = await requestMicrophonePermission()
             guard granted else { throw CaptureEngineError.microphonePermissionDenied }
         }
 
-        if enableSystemAudio {
+        // Only enable SCStream audio for globalSystem mode
+        if useSCStreamAudio {
             configuration.capturesAudio = true
         }
         if enableMic {
@@ -105,7 +120,7 @@ final class CaptureEngine: NSObject, @unchecked Sendable {
 
         // Audio formats for MovieFileWriter
         var sysASBD: AudioStreamBasicDescription?
-        if enableSystemAudio {
+        if useSCStreamAudio || tapCapture != nil {
             var asbd = AudioStreamBasicDescription()
             asbd.mSampleRate = 48000
             asbd.mFormatID = kAudioFormatLinearPCM
@@ -120,7 +135,6 @@ final class CaptureEngine: NSObject, @unchecked Sendable {
 
         var micASBD: AudioStreamBasicDescription?
         if enableMic {
-            // SCStream mic uses device native format (typically 48kHz mono)
             var asbd = AudioStreamBasicDescription()
             asbd.mSampleRate = 48000
             asbd.mFormatID = kAudioFormatLinearPCM
@@ -141,9 +155,16 @@ final class CaptureEngine: NSObject, @unchecked Sendable {
             videoCodec: request.preferredCodec
         )
 
+        // Wire up ProcessTap audio → writer
+        if let tap = tapCapture {
+            tap.onSampleBuffer = { [weak self] sampleBuffer in
+                self?.writer?.append(sampleBuffer, to: .systemAudio)
+            }
+        }
+
         let stream = SCStream(filter: filter, configuration: configuration, delegate: self)
         try stream.addStreamOutput(self, type: .screen, sampleHandlerQueue: sampleQueue)
-        if enableSystemAudio {
+        if useSCStreamAudio {
             try stream.addStreamOutput(self, type: .audio, sampleHandlerQueue: sampleQueue)
         }
         if enableMic {
@@ -152,19 +173,26 @@ final class CaptureEngine: NSObject, @unchecked Sendable {
 
         self.writer = writer
         self.stream = stream
+        self.processTap = tapCapture
 
         do {
             try await stream.startCapture()
+            try tapCapture?.start()
             isRecording = true
         } catch {
+            tapCapture?.stop()
             self.writer = nil
             self.stream = nil
+            self.processTap = nil
             throw error
         }
     }
 
     func stop() async throws {
         guard isRecording, let stream else { throw CaptureEngineError.notRecording }
+
+        processTap?.stop()
+        processTap = nil
 
         try await stream.stopCapture()
         self.stream = nil
@@ -199,6 +227,8 @@ extension CaptureEngine: SCStreamOutput {
 extension CaptureEngine: SCStreamDelegate {
     func stream(_ stream: SCStream, didStopWithError error: Error) {
         isRecording = false
+        processTap?.stop()
+        processTap = nil
         self.stream = nil
     }
 }

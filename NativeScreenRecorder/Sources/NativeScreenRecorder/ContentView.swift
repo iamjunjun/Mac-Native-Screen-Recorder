@@ -19,9 +19,9 @@ struct ContentView: View {
 
                     VStack(spacing: 18) {
                         codecPanel
-                            .frame(height: 126)
+                            .frame(height: (panelHeight - 18) / 2)
                         storagePanel
-                            .frame(height: panelHeight - 126 - 18)
+                            .frame(height: (panelHeight - 18) / 2)
                     }
                     .frame(width: columnWidth, height: panelHeight)
                 }
@@ -125,30 +125,45 @@ struct ContentView: View {
             } label: {
                 VStack(spacing: 10) {
                     ZStack {
+                        // Outer white ring — fades out when recording
                         Circle()
                             .fill(.white.opacity(0.55))
                             .frame(width: 112, height: 112)
-                            .shadow(color: .red.opacity(store.isRecording ? 0.36 : 0.28), radius: 34, y: 14)
-                        Circle()
-                            .fill(
-                                RadialGradient(
-                                    colors: store.isRecording
-                                        ? [Color.red.opacity(0.95), Color.red.opacity(0.55), Color.white.opacity(0.25)]
-                                        : [Color.red.opacity(0.82), Color.red.opacity(0.42), Color.white.opacity(0.22)],
-                                    center: .center,
-                                    startRadius: 8,
-                                    endRadius: 58
-                                )
-                            )
-                            .frame(width: 82, height: 82)
+                            .shadow(color: .red.opacity(0.28), radius: 34, y: 14)
+                            .opacity(store.isRecording ? 0 : 1)
+                            .animation(.easeInOut(duration: 0.3), value: store.isRecording)
+
                         Circle()
                             .stroke(.white.opacity(0.75), lineWidth: 1)
                             .frame(width: 112, height: 112)
-                    }
+                            .opacity(store.isRecording ? 0 : 1)
+                            .animation(.easeInOut(duration: 0.3), value: store.isRecording)
 
-                    Text(store.isRecording ? "停止录制" : "开始录制")
+                        // Inner red shape — morphs from circle to capsule, always centered
+                        RedRecordShape(isRecording: store.isRecording)
+                            .shadow(color: .red.opacity(0.42), radius: 16, y: 8)
+
+                        // Elapsed time overlay
+                        if store.isRecording {
+                            HStack(spacing: 10) {
+                                Circle()
+                                    .fill(.white)
+                                    .frame(width: 8, height: 8)
+                                Text(store.formattedElapsedTime)
+                                    .font(.system(size: 18, weight: .medium, design: .monospaced))
+                                    .foregroundStyle(.white)
+                            }
+                            .transition(.opacity)
+                            .animation(.easeInOut(duration: 0.3), value: store.isRecording)
+                        }
+                    }
+                    .frame(width: 180, height: 112)
+
+                    Text("开始录制")
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(.primary)
+                        .opacity(store.isRecording ? 0 : 1)
+                        .animation(.easeInOut(duration: 0.25), value: store.isRecording)
                 }
             }
             .buttonStyle(.plain)
@@ -187,7 +202,7 @@ struct ContentView: View {
         .padding(.horizontal, 48)
         .padding(.vertical, 22)
         .frame(maxWidth: .infinity)
-        .glassCard(cornerRadius: 34, shadowRadius: 26)
+        .glassCard(cornerRadius: 18, shadowRadius: 26)
     }
 
     private var capturePanel: some View {
@@ -358,12 +373,7 @@ struct ContentView: View {
 
                 Spacer()
 
-                if store.isMicrophoneEnabled {
-                    Text("建议佩戴耳机以避免回声")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
+
             }
             .padding(.horizontal, 4)
         }
@@ -602,5 +612,45 @@ private extension View {
                     .stroke(.white.opacity(0.48), lineWidth: 1)
             )
             .shadow(color: Color(red: 0.30, green: 0.48, blue: 0.70).opacity(0.14), radius: shadowRadius, y: 14)
+    }
+}
+
+/// Red recording button shape that morphs from circle to capsule, expanding from center.
+private struct RedRecordShape: View {
+    let isRecording: Bool
+
+    private var shapeWidth: CGFloat { isRecording ? 180 : 82 }
+    private var shapeHeight: CGFloat { isRecording ? 56 : 82 }
+    private var cornerRadius: CGFloat { isRecording ? 28 : 41 }
+
+    var body: some View {
+        GeometryReader { geo in
+            let containerCenter = CGPoint(x: geo.size.width / 2, y: geo.size.height / 2)
+            let originX = containerCenter.x - shapeWidth / 2
+            let originY = containerCenter.y - shapeHeight / 2
+
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                .fill(
+                    isRecording
+                        ? AnyShapeStyle(Color.red)
+                        : AnyShapeStyle(
+                            RadialGradient(
+                                colors: [Color.red.opacity(0.82), Color.red.opacity(0.42), Color.white.opacity(0.22)],
+                                center: .center,
+                                startRadius: 8,
+                                endRadius: 41
+                            )
+                        )
+                )
+                .frame(width: shapeWidth, height: shapeHeight)
+                .offset(x: originX, y: originY)
+                .overlay(
+                    RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                        .stroke(.white.opacity(isRecording ? 0.75 : 0), lineWidth: 1)
+                        .frame(width: shapeWidth, height: shapeHeight)
+                        .offset(x: originX, y: originY)
+                )
+        }
+        .animation(.easeInOut(duration: 0.35), value: isRecording)
     }
 }

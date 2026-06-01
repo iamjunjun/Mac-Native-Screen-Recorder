@@ -17,9 +17,12 @@ final class RecorderStore: ObservableObject {
     @Published var isMicrophoneEnabled = false
     @Published var statusText = "准备录制"
     @Published var errorText: String?
+    @Published var elapsedTime: TimeInterval = 0
 
     private let captureEngine = CaptureEngine()
     private var recordingAreaOverlay: NSWindow?
+    private var recordingStartTime: Date?
+    private var timerTask: Task<Void, Never>?
 
     var isPermissionDenied: Bool { errorText?.contains("TCC") == true || errorText?.contains("权限") == true }
 
@@ -174,6 +177,9 @@ final class RecorderStore: ObservableObject {
 
             try await captureEngine.start(request: request)
             isRecording = true
+            elapsedTime = 0
+            recordingStartTime = Date()
+            startTimer()
             statusText = "正在录制到 \(outputURL.lastPathComponent)"
             errorText = nil
 
@@ -195,10 +201,12 @@ final class RecorderStore: ObservableObject {
         do {
             try await captureEngine.stop()
             isRecording = false
+            stopTimer()
             statusText = "录制完成：\(outputURL.path)"
             errorText = nil
         } catch {
             isRecording = false
+            stopTimer()
             errorText = readableError(error)
             statusText = "停止录制时出错"
         }
@@ -213,6 +221,36 @@ final class RecorderStore: ObservableObject {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd-HH-mm-ss"
         return "NativeScreenRecorder-\(formatter.string(from: Date())).mp4"
+    }
+
+    private func startTimer() {
+        timerTask?.cancel()
+        timerTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 100_000_000) // 0.1s
+                guard let self, let start = self.recordingStartTime else { break }
+                await MainActor.run {
+                    self.elapsedTime = Date().timeIntervalSince(start)
+                }
+            }
+        }
+    }
+
+    private func stopTimer() {
+        timerTask?.cancel()
+        timerTask = nil
+        recordingStartTime = nil
+    }
+
+    var formattedElapsedTime: String {
+        let total = Int(elapsedTime)
+        let h = total / 3600
+        let m = (total % 3600) / 60
+        let s = total % 60
+        if h > 0 {
+            return String(format: "%d:%02d:%02d", h, m, s)
+        }
+        return String(format: "%02d:%02d", m, s)
     }
 
     private func readableError(_ error: Error) -> String {

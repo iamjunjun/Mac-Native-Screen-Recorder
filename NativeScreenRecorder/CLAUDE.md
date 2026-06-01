@@ -36,9 +36,10 @@ cp App/AppIcon.icns "$APP_DIR/Contents/Resources/"
 Sources/NativeScreenRecorder/
 ├── NativeScreenRecorderApp.swift    # @main 入口，.task 中刷新内容 + 延迟合并音频进程
 ├── ContentView.swift                # SwiftUI 界面，Modern 风格，毛玻璃背景，图标化分区
-├── RecorderStore.swift              # @MainActor ObservableObject，所有 UI 状态 + 录制控制
-├── CaptureEngine.swift              # SCStream 三轨采集（.screen/.audio/.microphone）
-├── MovieFileWriter.swift            # AVAssetWriter MP4，双音频轨道（系统+麦克风）
+├── RecorderStore.swift              # @MainActor ObservableObject，所有 UI 状态 + 录制控制 + 计时器
+├── CaptureEngine.swift              # SCStream 画面+麦克风 + ProcessTapAudioCapture 指定应用音频
+├── ProcessTapAudioCapture.swift     # Core Audio Process Tap，按 PID 捕获指定应用音频
+├── MovieFileWriter.swift            # AVAssetWriter MP4，VTPixelTransferSession 色彩转换，双音频轨道
 ├── Models.swift                     # AudioCaptureMode, CaptureMode, VideoCodec, RecordingRequest
 ├── CoreAudioHelpers.swift           # checkOSStatus, CoreAudioError, audioObjectPropertyAddress
 ├── AudioProcessDiscovery.swift      # kAudioHardwarePropertyProcessObjectList 发现音频进程
@@ -46,26 +47,31 @@ Sources/NativeScreenRecorder/
 └── RecordingAreaOverlay.swift       # 录制中虚线边框叠加层，sharingType=.none 排除录制
 ```
 
-### 数据流（v2.6.0 三轨分离架构）
+### 数据流
 
+**全局系统声音模式（globalSystem）**：
 ```
 SCStream ── .screen ──→ CMSampleBuffer ──→ MovieFileWriter (video track)
          ── .audio ──→ CMSampleBuffer ──→ MovieFileWriter (systemAudio track)
          ── .mic   ──→ CMSampleBuffer ──→ MovieFileWriter (microphone track)
-                                                        ↓
-                                                    .mp4 输出
 ```
 
-- 系统音频：`configuration.capturesAudio = true`，SCStream `.audio` 输出
-- 麦克风：`configuration.captureMicrophone = true`（macOS 15+），SCStream `.microphone` 输出
+**指定应用声音模式（selectedApplication）**：
+```
+SCStream ── .screen ──→ CMSampleBuffer ──→ MovieFileWriter (video track)
+         ── .mic   ──→ CMSampleBuffer ──→ MovieFileWriter (microphone track)
+ProcessTapAudioCapture ──→ CMSampleBuffer ──→ MovieFileWriter (systemAudio track)
+```
+
+- 全局模式：SCStream 三轨独立采集，双 AAC 独立编码
+- 指定应用模式：SCStream 负责画面+麦克风，ProcessTapAudioCapture（Core Audio Process Tap）单独捕获指定应用音频
 - 两路音频各自独立 AAC 编码，AVAssetWriter 自动同步，不做任何混合
-- 无 AVAudioEngine、无 ProcessTap、无手动 PCM 混音
 
 ### 录制模式
 
 - **全屏**: `configuration.width/height = mode.pixelWidth/pixelHeight`（CGDisplayCopyDisplayMode 取物理像素）
 - **区域**: `configuration.sourceRect` (Quartz 坐标) + `configuration.width/height = 裁剪后像素尺寸`
-- **声音**: 全局系统声音 / 指定应用声音 (SCStream `.audio`)
+- **声音**: 全局系统声音 (SCStream `.audio`) / 指定应用声音 (ProcessTapAudioCapture)
 - **麦克风**: 开关控制，SCStream `.microphone` 独立轨道
 
 ## 关键设计决策与坑
@@ -90,7 +96,9 @@ SCStream ── .screen ──→ CMSampleBuffer ──→ MovieFileWriter (vide
 CoreAudio 进程列表(`discoverRunningAudioProcesses`) 延迟 500ms 在 `mergeAudioProcesses()` 中执行，避免启动时 CoreAudio 内部断言。
 
 ### 6. 编码
-- 像素格式: `kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange` ('420v')
+- SCStream 像素格式: `kCVPixelFormatType_32BGRA`（保留原始 full range 数据）
+- VTPixelTransferSession: Display P3 → Rec.709 色彩空间转换（macOS 屏幕原生 P3 广色域，视频标准用 Rec.709）
+- 编码器输出: BGRA + Rec.709 色彩属性 + full range 元数据
 - `scalesToFit = false`（不做内部缩放）
 - HEVC vs H.264 码率阶梯（按像素数分档），B-frames 开启
 - 双 AAC 音频轨道：系统音频 192kbps / 麦克风 128kbps
@@ -110,9 +118,18 @@ Chrome/Edge 等浏览器将音频放在子进程中，Safari 的 WebKit.GPU 是 
 
 **注意**: `captureMicrophone` 和 `.microphone` 输出类型需要 macOS 15.0+。
 
-### 10. 麦克风回声问题
+### 10. 色彩管线（防泛白）
+**问题**: 之前录制画面泛白、颜色不鲜艳，两个原因：
+1. 编码器默认 limited range（Y=16-235），屏幕数据是 full range（0-255），直接喂给编码器导致对比度降低
+2. macOS 屏幕是 Display P3 广色域，视频标准是 Rec.709，不转换导致饱和度不足
+
+**方案**:
+- SCStream 输出 BGRA（保留原始 full range）
+- `VTPixelTransferSession` 做 Display P3 → Rec.709 色彩空间转换
+- 编码器输出 full range + Rec.709 色彩元数据
+
+### 11. 麦克风回声问题
 录制时如果同时用扬声器播放系统声音，麦克风会录到扬声器输出的声音，造成回声。
-**建议**: UI 中提示用户佩戴耳机。
 
 ## 版本
 
@@ -125,7 +142,12 @@ Chrome/Edge 等浏览器将音频放在子进程中，Safari 的 WebKit.GPU 是 
 - **v2.5.1**: 修复混音循环内采样率转换误差 — 改用简单递增索引
 - **v2.5.2**: 修复混音增益过高导致系统音频压制麦克风 — 改用加法混合替代 tanhf
 - **v2.5.4**: 修复声道选择 + 格式统一 + 削波限幅（混音失真仍未解决）
-- **v2.6.0** (当前): **三轨分离架构** — 彻底移除手动混音，SCStream 三轨独立采集+独立编码
+- **v2.6.0**: **三轨分离架构** — 彻底移除手动混音，SCStream 三轨独立采集+独立编码
   - 删除 AudioEngineMixer.swift、AudioMixer.swift、ProcessTapAudioCapture.swift
   - MovieFileWriter 支持双 AAC 音频轨道
   - 最低系统要求提升至 macOS 15.0
+- **v2.6.1** (当前): **色彩管线 + 指定应用声音修复 + UI 微调**
+  - 修复录屏画面泛白：BGRA full range + VTPixelTransferSession Display P3 → Rec.709
+  - 恢复 ProcessTapAudioCapture：指定应用声音模式用 Core Audio Process Tap 单独捕获
+  - UI：圆角统一、编码/存储面板等高、录制按钮计时胶囊动画
+  - 删除麦克风回声提示

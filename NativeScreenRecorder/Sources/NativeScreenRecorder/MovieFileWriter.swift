@@ -14,6 +14,7 @@ final class MovieFileWriter: @unchecked Sendable {
     private var microphoneInput: AVAssetWriterInput?
     private var didStartSession = false
     private var didFinish = false
+    private var pixelTransferSession: VTPixelTransferSession?
 
     init(outputURL: URL, width: Int, height: Int,
          systemAudioFormat: AudioStreamBasicDescription? = nil,
@@ -49,6 +50,15 @@ final class MovieFileWriter: @unchecked Sendable {
             AVVideoCodecKey: codecType,
             AVVideoWidthKey: width,
             AVVideoHeightKey: height,
+            AVVideoPixelAspectRatioKey: [
+                AVVideoPixelAspectRatioHorizontalSpacingKey: 1,
+                AVVideoPixelAspectRatioVerticalSpacingKey: 1
+            ],
+            AVVideoColorPropertiesKey: [
+                AVVideoColorPrimariesKey: AVVideoColorPrimaries_ITU_R_709_2,
+                AVVideoTransferFunctionKey: AVVideoTransferFunction_ITU_R_709_2,
+                AVVideoYCbCrMatrixKey: AVVideoYCbCrMatrix_ITU_R_709_2
+            ],
             AVVideoCompressionPropertiesKey: [
                 AVVideoAverageBitRateKey: bitRate,
                 AVVideoProfileLevelKey: profileLevel,
@@ -58,6 +68,21 @@ final class MovieFileWriter: @unchecked Sendable {
 
         videoInput = AVAssetWriterInput(mediaType: .video, outputSettings: videoSettings)
         videoInput.expectsMediaDataInRealTime = true
+
+        // Color space conversion: Display P3 (macOS screen) → Rec.709 (video standard)
+        var session: VTPixelTransferSession?
+        let status = VTPixelTransferSessionCreate(allocator: kCFAllocatorDefault, pixelTransferSessionOut: &session)
+        if status == noErr, let session {
+            let keys: [(String, String)] = [
+                ("DestinationColorPrimaries", AVVideoColorPrimaries_ITU_R_709_2),
+                ("DestinationTransferFunction", AVVideoTransferFunction_ITU_R_709_2),
+                ("DestinationYCbCrMatrix", AVVideoYCbCrMatrix_ITU_R_709_2)
+            ]
+            for (key, value) in keys {
+                VTSessionSetProperty(session, key: key as CFString, value: value as CFTypeRef)
+            }
+            self.pixelTransferSession = session
+        }
 
         // System audio track
         if let fmt = systemAudioFormat {
@@ -106,6 +131,42 @@ final class MovieFileWriter: @unchecked Sendable {
         switch mediaType {
         case .video:
             guard videoInput.isReadyForMoreMediaData else { return }
+            if let session = pixelTransferSession,
+               let inputPixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) {
+                var outputPixelBuffer: CVPixelBuffer?
+                CVPixelBufferCreate(
+                    kCFAllocatorDefault,
+                    CVPixelBufferGetWidth(inputPixelBuffer),
+                    CVPixelBufferGetHeight(inputPixelBuffer),
+                    CVPixelBufferGetPixelFormatType(inputPixelBuffer),
+                    nil,
+                    &outputPixelBuffer
+                )
+                if let output = outputPixelBuffer {
+                    VTPixelTransferSessionTransferImage(session, from: inputPixelBuffer, to: output)
+                    var timing = CMSampleTimingInfo(
+                        duration: CMSampleBufferGetDuration(sampleBuffer),
+                        presentationTimeStamp: CMSampleBufferGetPresentationTimeStamp(sampleBuffer),
+                        decodeTimeStamp: CMSampleBufferGetDecodeTimeStamp(sampleBuffer)
+                    )
+                    var formatDescription: CMVideoFormatDescription?
+                    CMVideoFormatDescriptionCreateForImageBuffer(allocator: kCFAllocatorDefault, imageBuffer: output, formatDescriptionOut: &formatDescription)
+                    if let desc = formatDescription {
+                        var converted: CMSampleBuffer?
+                        CMSampleBufferCreateReadyWithImageBuffer(
+                            allocator: kCFAllocatorDefault,
+                            imageBuffer: output,
+                            formatDescription: desc,
+                            sampleTiming: &timing,
+                            sampleBufferOut: &converted
+                        )
+                        if let converted {
+                            _ = videoInput.append(converted)
+                            return
+                        }
+                    }
+                }
+            }
             _ = videoInput.append(sampleBuffer)
         case .audio:
             guard let input = systemAudioInput, input.isReadyForMoreMediaData else { return }

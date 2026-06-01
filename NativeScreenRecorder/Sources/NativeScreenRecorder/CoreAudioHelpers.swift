@@ -28,13 +28,13 @@ enum CoreAudioError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .operationFailed(let operation, let status):
-            return "\(operation) 失败，CoreAudio 状态码：\(status)。"
+            return String(format: L.operationFailed, operation, status)
         case .processObjectNotFound(let pid):
-            return "找不到进程 \(pid) 对应的 CoreAudio 对象。请确认该应用正在播放或已经初始化音频。"
+            return String(format: L.processObjectNotFound, pid)
         case .tapUIDUnavailable:
-            return "无法读取 Process Tap 的 UID。"
+            return L.tapUIDUnavailable
         case .invalidAudioFormat:
-            return "Process Tap 返回了无法写入的音频格式。"
+            return L.invalidAudioFormat
         }
     }
 }

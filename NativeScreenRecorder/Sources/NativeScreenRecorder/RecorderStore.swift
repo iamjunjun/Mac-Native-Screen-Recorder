@@ -15,7 +15,7 @@ final class RecorderStore: ObservableObject {
     @Published var outputURL: URL = RecorderStore.defaultOutputURL()
     @Published var isRecording = false
     @Published var isMicrophoneEnabled = false
-    @Published var statusText = "准备录制"
+    @Published var statusText = L.readyToRecord
     @Published var errorText: String?
     @Published var elapsedTime: TimeInterval = 0
 
@@ -24,7 +24,10 @@ final class RecorderStore: ObservableObject {
     private var recordingStartTime: Date?
     private var timerTask: Task<Void, Never>?
 
-    var isPermissionDenied: Bool { errorText?.contains("TCC") == true || errorText?.contains("权限") == true }
+    var isPermissionDenied: Bool {
+        errorText?.contains("TCC") == true || errorText?.contains("权限") == true
+        || errorText?.contains("permission") == true || errorText?.contains("denied") == true
+    }
 
     func openScreenRecordingPrefs() {
         if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture") {
@@ -38,7 +41,7 @@ final class RecorderStore: ObservableObject {
             displays = content.displays.map {
                 DisplayOption(
                     id: $0.displayID,
-                    title: "显示器 \($0.displayID)",
+                    title: L.displayTitle($0.displayID),
                     width: $0.width,
                     height: $0.height
                 )
@@ -51,7 +54,7 @@ final class RecorderStore: ObservableObject {
                 .map {
                     ApplicationOption(
                         id: $0.processID,
-                        name: $0.applicationName.isEmpty ? "未命名应用" : $0.applicationName,
+                        name: $0.applicationName.isEmpty ? L.unnamedApp : $0.applicationName,
                         bundleIdentifier: $0.bundleIdentifier
                     )
                 }
@@ -62,7 +65,7 @@ final class RecorderStore: ObservableObject {
 
             selectedDisplayID = selectedDisplayID ?? displays.first?.id
             selectedApplicationID = selectedApplicationID ?? applications.first?.id
-            statusText = "已刷新可录制内容"
+            statusText = L.contentRefreshed
             errorText = nil
         } catch {
             let nsError = error as NSError
@@ -71,11 +74,11 @@ final class RecorderStore: ObservableObject {
                nsError.localizedDescription.contains("not authorized") || nsError.localizedDescription.contains("denied") ||
                nsError.localizedDescription.contains("没有权限") || nsError.localizedDescription.contains("授权") || nsError.localizedDescription.contains("TCC") ||
                nsError.localizedDescription.contains("拒绝") {
-                errorText = "屏幕录制权限未授权（TCC 拒绝）。\n请在系统设置 → 隐私与安全性 → 屏幕录制中允许本应用，然后重新打开应用。\n\n调试信息：\(rawInfo)"
+                errorText = String(format: L.screenRecordingDenied, rawInfo)
             } else {
                 errorText = readableError(error)
             }
-            statusText = "无法读取可录制内容"
+            statusText = L.failedToReadContent
         }
     }
 
@@ -102,7 +105,7 @@ final class RecorderStore: ObservableObject {
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         panel.allowsMultipleSelection = false
-        panel.prompt = "选择"
+        panel.prompt = L.select
 
         if panel.runModal() == .OK, let folder = panel.url {
             outputURL = folder.appendingPathComponent(Self.defaultFileName())
@@ -134,7 +137,7 @@ final class RecorderStore: ObservableObject {
             )
             self.selectedAreaRect = quartzRect
             self.captureMode = .area
-            self.statusText = "已选择区域：\(Int(quartzRect.width)) × \(Int(quartzRect.height))"
+            self.statusText = String(format: L.areaSelected, Int(quartzRect.width), Int(quartzRect.height))
         }
 
         overlayView.onCancel = { [weak self, weak window] in
@@ -148,17 +151,17 @@ final class RecorderStore: ObservableObject {
     func startRecording() async {
         guard !isRecording else { return }
         guard let displayID = selectedDisplayID else {
-            errorText = "没有可用显示器。请先点刷新。"
+            errorText = L.noDisplayError
             return
         }
 
         if audioMode == .selectedApplication && selectedApplicationID == nil {
-            errorText = "请选择要录制声音的应用。"
+            errorText = L.selectAppForAudio
             return
         }
 
         if captureMode == .area && selectedAreaRect == nil {
-            errorText = "请先拖选录制区域。"
+            errorText = L.selectAreaFirst
             return
         }
 
@@ -180,7 +183,7 @@ final class RecorderStore: ObservableObject {
             elapsedTime = 0
             recordingStartTime = Date()
             startTimer()
-            statusText = "正在录制到 \(outputURL.lastPathComponent)"
+            statusText = String(format: L.recordingTo, outputURL.lastPathComponent)
             errorText = nil
 
             if captureMode == .area, let areaRect = selectedAreaRect, let displayID = selectedDisplayID {
@@ -188,7 +191,7 @@ final class RecorderStore: ObservableObject {
             }
         } catch {
             errorText = readableError(error)
-            statusText = "启动录制失败"
+            statusText = L.failedToStart
         }
     }
 
@@ -202,13 +205,13 @@ final class RecorderStore: ObservableObject {
             try await captureEngine.stop()
             isRecording = false
             stopTimer()
-            statusText = "录制完成：\(outputURL.path)"
+            statusText = String(format: L.recordingSaved, outputURL.path)
             errorText = nil
         } catch {
             isRecording = false
             stopTimer()
             errorText = readableError(error)
-            statusText = "停止录制时出错"
+            statusText = L.errorStopping
         }
     }
 

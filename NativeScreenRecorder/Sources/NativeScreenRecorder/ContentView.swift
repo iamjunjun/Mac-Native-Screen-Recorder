@@ -38,9 +38,9 @@ struct ContentView: View {
     private var header: some View {
         HStack {
             VStack(alignment: .leading, spacing: 5) {
-                Text("原生录屏")
+                Text(L.appTitle)
                     .font(.system(size: 30, weight: .bold))
-                Text("不影响当前声音播放")
+                Text(L.subtitle)
                     .font(.system(size: 15))
                     .foregroundStyle(.secondary)
             }
@@ -77,14 +77,14 @@ struct ContentView: View {
             }
             .buttonStyle(.borderless)
             .disabled(store.isRecording)
-            .help("刷新设备与应用列表")
+            .help(L.refreshTooltip)
         }
     }
 
     private var heroControls: some View {
         HStack(spacing: 0) {
             HeroModeButton(
-                title: "全屏",
+                title: L.fullScreen,
                 systemImage: "desktopcomputer",
                 tint: .cyan,
                 isSelected: store.captureMode == .fullScreen
@@ -96,7 +96,7 @@ struct ContentView: View {
             Spacer(minLength: 20)
 
             HeroModeButton(
-                title: "自定义区域",
+                title: L.customArea,
                 systemImage: "crop",
                 tint: .purple,
                 isSelected: store.captureMode == .area
@@ -159,7 +159,7 @@ struct ContentView: View {
                     }
                     .frame(width: 180, height: 112)
 
-                    Text("开始录制")
+                    Text(store.isRecording ? L.stopRecording : L.startRecording)
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(.primary)
                         .opacity(store.isRecording ? 0 : 1)
@@ -177,7 +177,7 @@ struct ContentView: View {
             Spacer(minLength: 24)
 
             HeroToggleButton(
-                title: "麦克风",
+                title: L.microphone,
                 systemImage: "mic",
                 tint: .gray,
                 isOn: $store.isMicrophoneEnabled
@@ -187,7 +187,7 @@ struct ContentView: View {
             Spacer(minLength: 20)
 
             HeroToggleButton(
-                title: "系统声音",
+                title: L.systemAudio,
                 systemImage: "video.fill",
                 tint: .orange,
                 isOn: Binding(
@@ -207,14 +207,14 @@ struct ContentView: View {
 
     private var capturePanel: some View {
         VStack(alignment: .leading, spacing: 0) {
-            settingsRow("录制模式") {
+            settingsRow(L.captureMode) {
                 segmentedCaptureMode
             }
 
             panelDivider
 
             if store.captureMode == .area {
-                settingsRow("拖选区域") {
+                settingsRow(L.selectArea) {
                     HStack(spacing: 12) {
                         Button {
                             store.startAreaSelection()
@@ -232,7 +232,7 @@ struct ContentView: View {
                     }
                 }
             } else {
-                settingsRow("显示器") {
+                settingsRow(L.display) {
                     Menu {
                         ForEach(store.displays) { display in
                             Button(display.title) {
@@ -249,11 +249,11 @@ struct ContentView: View {
 
             panelDivider
 
-            settingsRow("声音来源") {
+            settingsRow(L.audioSource) {
                 segmentedAudioMode
             }
 
-            settingsRow("应用") {
+            settingsRow(L.application) {
                 if store.audioMode == .selectedApplication {
                     Menu {
                         ForEach(store.applications) { app in
@@ -267,7 +267,7 @@ struct ContentView: View {
                     .buttonStyle(.plain)
                     .disabled(store.isRecording)
                 } else {
-                    selectionField("全局", showsChevron: false)
+                    selectionField(L.global, showsChevron: false)
                 }
             }
         }
@@ -277,9 +277,9 @@ struct ContentView: View {
 
     private var codecPanel: some View {
         VStack(alignment: .leading, spacing: 18) {
-            panelTitle("编码", systemImage: "cpu")
+            panelTitle(L.encoding, systemImage: "cpu")
 
-            Picker("视频编码", selection: $store.preferredCodec) {
+            Picker(L.videoCodec, selection: $store.preferredCodec) {
                 ForEach(VideoCodec.allCases) { codec in
                     Text(codec.title).tag(codec)
                 }
@@ -296,7 +296,7 @@ struct ContentView: View {
 
     private var storagePanel: some View {
         VStack(alignment: .leading, spacing: 18) {
-            panelTitle("存储", systemImage: "folder")
+            panelTitle(L.storage, systemImage: "folder")
 
             HStack(spacing: 12) {
                 Text(store.outputURL.lastPathComponent)
@@ -319,7 +319,7 @@ struct ContentView: View {
                 }
                 .buttonStyle(.borderless)
                 .disabled(store.isRecording)
-                .help("选择保存位置")
+                .help(L.chooseSaveLocation)
 
                 Button {
                     store.openOutputFolder()
@@ -328,7 +328,7 @@ struct ContentView: View {
                         .frame(width: 34, height: 34)
                 }
                 .buttonStyle(.borderless)
-                .help("打开保存位置")
+                .help(L.openSaveLocation)
             }
         }
         .padding(20)
@@ -348,7 +348,7 @@ struct ContentView: View {
                         .fixedSize(horizontal: false, vertical: true)
 
                     if store.isPermissionDenied {
-                        Button("打开系统设置") {
+                        Button(L.openSystemSettings) {
                             store.openScreenRecordingPrefs()
                         }
                         .font(.callout)
@@ -362,7 +362,7 @@ struct ContentView: View {
                         .fill(store.isRecording ? .red : .green)
                         .frame(width: 8, height: 8)
 
-                    Text(store.isRecording ? "录制中" : "就绪")
+                    Text(store.isRecording ? L.recording : L.ready)
                         .font(.subheadline.weight(.medium))
 
                     Text(store.statusText)
@@ -381,15 +381,15 @@ struct ContentView: View {
 
     private var selectedAreaText: String {
         guard let rect = store.selectedAreaRect else {
-            return "点击图标拖选录制区域"
+            return L.clickToSelectArea
         }
-        return "已选区域：\(Int(rect.width)) × \(Int(rect.height))"
+        return String(format: L.selectedArea, Int(rect.width), Int(rect.height))
     }
 
     private var selectedDisplayTitle: String {
         guard let id = store.selectedDisplayID,
               let display = store.displays.first(where: { $0.id == id }) else {
-            return "选择显示器"
+            return L.selectDisplay
         }
         return display.title
     }
@@ -397,17 +397,17 @@ struct ContentView: View {
     private var selectedApplicationTitle: String {
         guard let id = store.selectedApplicationID,
               let app = store.applications.first(where: { $0.id == id }) else {
-            return "选择应用"
+            return L.selectApplication
         }
         return app.name
     }
 
     private var segmentedCaptureMode: some View {
         HStack(spacing: 6) {
-            pillButton("全屏", isSelected: store.captureMode == .fullScreen) {
+            pillButton(L.fullScreen, isSelected: store.captureMode == .fullScreen) {
                 store.captureMode = .fullScreen
             }
-            pillButton("区域选择", isSelected: store.captureMode == .area) {
+            pillButton(L.areaSelect, isSelected: store.captureMode == .area) {
                 store.captureMode = .area
                 store.startAreaSelection()
             }
@@ -418,10 +418,10 @@ struct ContentView: View {
 
     private var segmentedAudioMode: some View {
         HStack(spacing: 8) {
-            pillButton("全局系统声音", systemImage: "waveform", isSelected: store.audioMode == .globalSystem) {
+            pillButton(L.globalSystemAudio, systemImage: "waveform", isSelected: store.audioMode == .globalSystem) {
                 store.audioMode = .globalSystem
             }
-            pillButton("指定应用声音", systemImage: "scope", isSelected: store.audioMode == .selectedApplication) {
+            pillButton(L.appAudio, systemImage: "scope", isSelected: store.audioMode == .selectedApplication) {
                 store.audioMode = .selectedApplication
             }
         }

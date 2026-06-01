@@ -9,23 +9,17 @@ enum AudioCaptureMode: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .none:
-            return "关闭"
-        case .globalSystem:
-            return "全局系统声音"
-        case .selectedApplication:
-            return "指定应用声音"
+        case .none:             return L.off
+        case .globalSystem:     return L.globalSystemAudio
+        case .selectedApplication: return L.appAudio
         }
     }
 
     var detail: String {
         switch self {
-        case .none:
-            return "不录制系统音频。"
-        case .globalSystem:
-            return "录制整台 Mac 正在播放的系统音频，不改变当前扬声器或耳机。"
-        case .selectedApplication:
-            return "只捕获所选应用的窗口内容和音频，适合录浏览器、播放器或会议应用。"
+        case .none:             return L.noSystemAudio
+        case .globalSystem:     return L.globalSystemAudioDetail
+        case .selectedApplication: return L.appAudioDetail
         }
     }
 }
@@ -38,8 +32,8 @@ enum CaptureMode: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .fullScreen: return "全屏"
-        case .area:       return "区域选择"
+        case .fullScreen: return L.fullScreen
+        case .area:       return L.areaSelect
         }
     }
 }

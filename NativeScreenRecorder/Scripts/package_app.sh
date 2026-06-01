@@ -2,23 +2,39 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-APP_DIR="$ROOT_DIR/Build/NativeScreenRecorder.app"
-CONTENTS_DIR="$APP_DIR/Contents"
-MACOS_DIR="$CONTENTS_DIR/MacOS"
+BUILD_DIR="$ROOT_DIR/.build/arm64-apple-macosx/release"
+OUTPUT_DIR="$ROOT_DIR/Build"
+VERSION=$(grep -A1 'CFBundleShortVersionString' "$ROOT_DIR/App/Info.plist" | grep string | sed 's/.*<string>\(.*\)<\/string>/\1/')
 
 cd "$ROOT_DIR"
 
-DEVELOPER_DIR="${DEVELOPER_DIR:-/Applications/Xcode.app/Contents/Developer}" swift build
+rm -rf "$OUTPUT_DIR"
+mkdir -p "$OUTPUT_DIR"
 
-rm -rf "$APP_DIR"
-mkdir -p "$MACOS_DIR"
-cp "$ROOT_DIR/.build/debug/NativeScreenRecorder" "$MACOS_DIR/NativeScreenRecorder"
-cp "$ROOT_DIR/App/Info.plist" "$CONTENTS_DIR/Info.plist"
-mkdir -p "$CONTENTS_DIR/Resources"
-cp "$ROOT_DIR/App/AppIcon.icns" "$CONTENTS_DIR/Resources/AppIcon.icns"
-chmod +x "$MACOS_DIR/NativeScreenRecorder"
+package_app() {
+    local lang="$1"
+    local suffix="$2"
+    local app_dir="$OUTPUT_DIR/NativeScreenRecorder_v${VERSION}_${suffix}.app"
+    local contents="$app_dir/Contents"
 
-xattr -cr "$APP_DIR" 2>/dev/null || true
-codesign --deep --sign - "$APP_DIR" 2>/dev/null || true
+    mkdir -p "$contents/MacOS" "$contents/Resources"
+    cp "$BUILD_DIR/NativeScreenRecorder" "$contents/MacOS/"
+    cp "$ROOT_DIR/App/Info.plist" "$contents/"
+    cp "$ROOT_DIR/App/AppIcon.icns" "$contents/Resources/"
+    chmod +x "$contents/MacOS/NativeScreenRecorder"
+    xattr -cr "$app_dir" 2>/dev/null || true
+    codesign --deep --sign - "$app_dir" 2>/dev/null || true
+    echo "$app_dir"
+}
 
-echo "$APP_DIR"
+echo "Building Chinese version..."
+swift build -c release
+package_app "zh" "中文"
+
+echo "Building English version..."
+swift build -c release -Xswiftc -DENGLISH
+package_app "en" "English"
+
+echo ""
+echo "Done! Output:"
+ls -d "$OUTPUT_DIR"/*.app

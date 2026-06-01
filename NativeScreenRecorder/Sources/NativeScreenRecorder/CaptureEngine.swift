@@ -15,19 +15,19 @@ enum CaptureEngineError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .noDisplay:
-            return "找不到要录制的显示器。"
+            return L.noDisplayFound
         case .noApplication:
-            return "找不到要录制的应用，它可能已经退出或没有可捕获窗口。"
+            return L.appNotFound
         case .alreadyRecording:
-            return "当前已经在录制。"
+            return L.alreadyRecording
         case .notRecording:
-            return "当前没有正在进行的录制。"
+            return L.notRecording
         case .streamStopped(let error):
-            return error?.localizedDescription ?? "录制流已停止。"
+            return error?.localizedDescription ?? L.streamStopped
         case .processTapUnavailable:
-            return "Core Audio Process Tap 需要 macOS 14.2 或更新版本。"
+            return L.processTapUnavailable
         case .microphonePermissionDenied:
-            return "麦克风权限未授权，请在系统设置 → 隐私与安全性 → 麦克风中允许本应用。"
+            return L.micPermissionDenied
         }
     }
 }

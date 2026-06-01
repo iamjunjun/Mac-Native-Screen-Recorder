@@ -30,6 +30,28 @@ cp App/Info.plist "$APP_DIR/Contents/"
 cp App/AppIcon.icns "$APP_DIR/Contents/Resources/"
 ```
 
+## 中英文语言切换
+
+采用**编译时切换**方案，不依赖系统语言。
+
+- `Localization.swift` 中 `Language` 枚举定义 `.chinese` / `.english`
+- `L` 枚举包含所有 UI 字符串的静态属性，根据 `L.language` 返回对应语言文本
+- 语言由 `#if ENGLISH` 编译 flag 决定，默认中文
+
+```bash
+# 中文版构建
+swift build -c release
+
+# 英文版构建
+swift build -c release -Xswiftc -DENGLISH
+```
+
+`./Scripts/package_app.sh` 会自动构建两个版本并打包为：
+- `NativeScreenRecorder_v{版本}_中文.app`
+- `NativeScreenRecorder_v{版本}_English.app`
+
+添加新 UI 文本时，在 `L` 枚举中新增静态属性，用三元表达式 `language == .english ? "English" : "中文"` 即可。
+
 ## 架构
 
 ```
@@ -43,6 +65,7 @@ Sources/NativeScreenRecorder/
 ├── Models.swift                     # AudioCaptureMode, CaptureMode, VideoCodec, RecordingRequest
 ├── CoreAudioHelpers.swift           # checkOSStatus, CoreAudioError, audioObjectPropertyAddress
 ├── AudioProcessDiscovery.swift      # kAudioHardwarePropertyProcessObjectList 发现音频进程
+├── Localization.swift               # Language 枚举 + L 静态字符串表，编译时中英文切换
 ├── AreaSelectionOverlayView.swift   # 全屏透明蒙层，拖拽选区，mouseDown/Dragged/Up，ESC取消
 └── RecordingAreaOverlay.swift       # 录制中虚线边框叠加层，sharingType=.none 排除录制
 ```
@@ -146,8 +169,9 @@ Chrome/Edge 等浏览器将音频放在子进程中，Safari 的 WebKit.GPU 是 
   - 删除 AudioEngineMixer.swift、AudioMixer.swift、ProcessTapAudioCapture.swift
   - MovieFileWriter 支持双 AAC 音频轨道
   - 最低系统要求提升至 macOS 15.0
-- **v2.6.1** (当前): **色彩管线 + 指定应用声音修复 + UI 微调**
+- **v2.6.1** (当前): **色彩管线 + 指定应用声音修复 + UI 微调 + 英文界面**
   - 修复录屏画面泛白：BGRA full range + VTPixelTransferSession Display P3 → Rec.709
   - 恢复 ProcessTapAudioCapture：指定应用声音模式用 Core Audio Process Tap 单独捕获
   - UI：圆角统一、编码/存储面板等高、录制按钮计时胶囊动画
   - 删除麦克风回声提示
+  - 英文界面支持：Localization.swift + 编译时 `-DENGLISH` flag 切换

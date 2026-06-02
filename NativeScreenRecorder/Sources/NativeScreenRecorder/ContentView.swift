@@ -77,7 +77,6 @@ struct ContentView: View {
             }
             .buttonStyle(.borderless)
             .disabled(store.isRecording)
-            .help(Text("refresh_tooltip", bundle: .module))
         }
     }
 
@@ -87,11 +86,24 @@ struct ContentView: View {
             VStack(spacing: 16) {
                 // 第一行：图标
                 HStack(spacing: 0) {
-                    HeroIcon(systemImage: "desktopcomputer", tint: .cyan, size: 64)
-                        .frame(maxWidth: .infinity)
+                    // 全屏
+                    Button {
+                        store.captureMode = .fullScreen
+                    } label: {
+                        HeroIcon(systemImage: "desktopcomputer", tint: .cyan, size: 64)
+                    }
+                    .buttonStyle(.plain)
+                    .frame(maxWidth: .infinity)
 
-                    HeroIcon(systemImage: "crop", tint: .purple, size: 64)
-                        .frame(maxWidth: .infinity)
+                    // 区域
+                    Button {
+                        store.captureMode = .area
+                        store.startAreaSelection()
+                    } label: {
+                        HeroIcon(systemImage: "crop", tint: .purple, size: 64)
+                    }
+                    .buttonStyle(.plain)
+                    .frame(maxWidth: .infinity)
 
                     // 中间留空给录制按钮
                     Spacer().frame(maxWidth: .infinity)
@@ -107,12 +119,12 @@ struct ContentView: View {
                 HStack(spacing: 0) {
                     Text(String.localized("full_screen"))
                         .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(store.captureMode == .fullScreen ? Color(red: 0.18, green: 0.43, blue: 0.92) : .secondary)
                         .frame(maxWidth: .infinity)
 
                     Text(String.localized("custom_area"))
                         .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(store.captureMode == .area ? Color(red: 0.18, green: 0.43, blue: 0.92) : .secondary)
                         .frame(maxWidth: .infinity)
 
                     Spacer().frame(maxWidth: .infinity)
@@ -165,7 +177,7 @@ struct ContentView: View {
                     .frame(maxWidth: .infinity)
                 }
             }
-            .padding(.horizontal, 48)
+            .padding(.horizontal, 28)
             .padding(.vertical, 22)
 
             // 录制按钮（居中覆盖）
@@ -213,6 +225,8 @@ struct ContentView: View {
                 }
             }
             .buttonStyle(.plain)
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 50)
         }
         .frame(maxWidth: .infinity)
         .glassCard(cornerRadius: 18, shadowRadius: 26)
@@ -285,6 +299,7 @@ struct ContentView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
         .glassCard(cornerRadius: 18, shadowRadius: 16)
     }
 
@@ -332,7 +347,6 @@ struct ContentView: View {
                 }
                 .buttonStyle(.borderless)
                 .disabled(store.isRecording)
-                .help(Text("choose_save_location", bundle: .module))
 
                 Button {
                     store.openOutputFolder()
@@ -341,7 +355,6 @@ struct ContentView: View {
                         .frame(width: 34, height: 34)
                 }
                 .buttonStyle(.borderless)
-                .help(Text("open_save_location", bundle: .module))
             }
         }
         .padding(20)
@@ -434,6 +447,7 @@ struct ContentView: View {
             }
         }
         .frame(maxWidth: .infinity)
+        .contentShape(Rectangle())
         .disabled(store.isRecording)
     }
 
@@ -456,6 +470,7 @@ struct ContentView: View {
                 .font(.system(size: 15, weight: .semibold))
                 .frame(width: 94, alignment: .leading)
             content()
+                .contentShape(Rectangle())
         }
         .padding(.horizontal, 22)
         .frame(height: 76)
@@ -524,6 +539,7 @@ struct ContentView: View {
             )
         }
         .buttonStyle(.plain)
+        .contentShape(Rectangle())
     }
 
     private var appBackground: some View {

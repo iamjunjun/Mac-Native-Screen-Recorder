@@ -27,5 +27,6 @@ struct NativeScreenRecorderApp: App {
             Image(systemName: store.isRecording ? "record.circle.fill" : "record.circle")
                 .foregroundStyle(store.isRecording ? .red : .primary)
         }
+        .menuBarExtraStyle(.menu)
     }
 }

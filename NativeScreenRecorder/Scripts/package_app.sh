@@ -25,6 +25,10 @@ cp "$ROOT_DIR/App/AppIcon.icns" "$contents/Resources/"
 # 复制本地化资源到 app bundle
 if [ -d "$BUILD_DIR/NativeScreenRecorder_NativeScreenRecorder.bundle" ]; then
     cp -R "$BUILD_DIR/NativeScreenRecorder_NativeScreenRecorder.bundle" "$contents/Resources/"
+    # 复制 .lproj 到顶层 Resources，使 InfoPlist.strings 和 CFBundleLocalizations 生效
+    for lproj in "$BUILD_DIR/NativeScreenRecorder_NativeScreenRecorder.bundle"/*.lproj; do
+        cp -R "$lproj" "$contents/Resources/"
+    done
 fi
 
 chmod +x "$contents/MacOS/NativeScreenRecorder"

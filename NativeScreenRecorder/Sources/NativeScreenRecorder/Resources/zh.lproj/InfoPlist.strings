@@ -1,0 +1,11 @@
+/* App name shown in Dock and menu bar */
+"CFBundleName" = "原生录屏";
+
+/* Microphone usage description */
+"NSMicrophoneUsageDescription" = "用于在录制系统声音的同时录制麦克风语音。";
+
+/* Audio capture usage description */
+"NSAudioCaptureUsageDescription" = "用于录制系统或指定应用正在播放的声音。";
+
+/* Screen capture usage description */
+"NSScreenCaptureUsageDescription" = "用于录制屏幕画面。";

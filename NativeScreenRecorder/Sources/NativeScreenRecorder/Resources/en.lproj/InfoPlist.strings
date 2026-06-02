@@ -1,0 +1,11 @@
+/* App name shown in Dock and menu bar */
+"CFBundleName" = "NativeScreenRecorder";
+
+/* Microphone usage description */
+"NSMicrophoneUsageDescription" = "Record microphone audio alongside system sound.";
+
+/* Audio capture usage description */
+"NSAudioCaptureUsageDescription" = "Record system audio or a selected application's sound.";
+
+/* Screen capture usage description */
+"NSScreenCaptureUsageDescription" = "Record the screen.";

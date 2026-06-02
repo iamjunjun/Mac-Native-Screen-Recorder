@@ -4,6 +4,11 @@
 <dict>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>zh_CN</string>
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>zh</string>
+		<string>en</string>
+	</array>
 	<key>CFBundleExecutable</key>
 	<string>NativeScreenRecorder</string>
 	<key>CFBundleIdentifier</key>
@@ -11,7 +16,7 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>原生录屏</string>
+	<string>NativeScreenRecorder</string>
 	<key>CFBundleIconFile</key>
 	<string>AppIcon</string>
 	<key>CFBundlePackageType</key>
@@ -23,11 +28,11 @@
 	<key>LSMinimumSystemVersion</key>
 	<string>15.0</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>用于在录制系统声音的同时录制麦克风语音。</string>
+	<string>Record microphone audio alongside system sound.</string>
 	<key>NSAudioCaptureUsageDescription</key>
-	<string>用于录制系统或指定应用正在播放的声音。</string>
+	<string>Record system audio or a selected application's sound.</string>
 	<key>NSScreenCaptureUsageDescription</key>
-	<string>用于录制屏幕画面。</string>
+	<string>Record the screen.</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
 </dict>

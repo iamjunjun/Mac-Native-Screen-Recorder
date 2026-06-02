@@ -3,3 +3,4 @@ Build/
 *.app
 .DS_Store
 DerivedData/
+.claude/settings.local.json

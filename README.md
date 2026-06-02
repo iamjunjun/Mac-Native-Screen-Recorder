@@ -8,11 +8,11 @@
 
 ### 中文版
 
-![中文版](Screenshots/中文版界面.png)
+![中文版](Screenshots/中文界面.png)
 
 ### 英文版
 
-![英文版](Screenshots/英文版界面.png)
+![英文版](Screenshots/英文界面.png)
 
 ---
 

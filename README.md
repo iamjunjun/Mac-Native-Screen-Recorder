@@ -8,11 +8,11 @@
 
 ### 中文版
 
-![中文版](Screenshots/中文版.png)
+![中文版](Screenshots/中文版界面.png)
 
 ### 英文版
 
-![英文版](Screenshots/英文版.png)
+![英文版](Screenshots/英文版界面.png)
 
 ---
 
@@ -84,10 +84,9 @@ macOS 屏幕原生使用 Display P3 广色域，但视频标准使用 Rec.709。
 
 | 版本 | 下载 |
 |------|------|
-| 中文版 v2.6.1 | [NativeScreenRecorder_v2.6.1_中文.zip](Releases/NativeScreenRecorder_v2.6.1_中文.zip) |
-| English v2.6.1 | [NativeScreenRecorder_v2.6.1_English.zip](Releases/NativeScreenRecorder_v2.6.1_English.zip) |
+| v2.6.2 (自动跟随系统语言) | [NativeScreenRecorder_v2.6.2.zip](Releases/NativeScreenRecorder_v2.6.2.zip) |
 
-下载后解压，将 `.app` 拖入「应用程序」文件夹即可。
+下载后解压，将 `.app` 拖入「应用程序」文件夹即可。软件会自动跟随系统语言显示中文或英文界面。
 
 首次打开时，在程序图标上右键 →「打开」以绕过未签名应用的 Gatekeeper 提示。之后即可正常使用。
 
@@ -157,6 +156,7 @@ swift build -c release -Xswiftc -DENGLISH
 | v2.5 | 修复混音采样率对齐 + 麦克风独立录制崩溃 |
 | v2.6.0 | **三轨分离架构** — 彻底解决混合录制失真问题 |
 | v2.6.1 | 色彩管线修复 + 指定应用声音恢复 + 英文界面 + UI 微调 |
+| v2.6.2 | 菜单栏功能 + 麦克风硬件检测 + 系统语言自动跟随 + UI 优化 |
 
 ---
 

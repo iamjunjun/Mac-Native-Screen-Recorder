@@ -10,11 +10,11 @@ A pure macOS-native screen recording tool. No virtual audio drivers (BlackHole) 
 
 ### Chinese UI
 
-![Chinese UI](Screenshots/中文版.png)
+![Chinese UI](Screenshots/中文版界面.png)
 
 ### English UI
 
-![English UI](Screenshots/英文版.png)
+![English UI](Screenshots/英文版界面.png)
 
 ---
 
@@ -86,10 +86,9 @@ Full Chinese and English interfaces, switched at compile time via the `-DENGLISH
 
 | Version | Link |
 |---------|------|
-| 中文版 v2.6.1 | [NativeScreenRecorder_v2.6.1_中文.zip](Releases/NativeScreenRecorder_v2.6.1_中文.zip) |
-| English v2.6.1 | [NativeScreenRecorder_v2.6.1_English.zip](Releases/NativeScreenRecorder_v2.6.1_English.zip) |
+| v2.6.2 (auto language detection) | [NativeScreenRecorder_v2.6.2.zip](Releases/NativeScreenRecorder_v2.6.2.zip) |
 
-Unzip and drag the `.app` bundle into your Applications folder.
+Unzip and drag the `.app` bundle into your Applications folder. The app automatically follows your system language — Chinese or English.
 
 On first launch, right-click the app icon → **Open** to bypass Gatekeeper for the unsigned binary. Subsequent launches work normally.
 
@@ -157,6 +156,7 @@ swift build -c release -Xswiftc -DENGLISH
 | v2.5 | Mixing sample-rate fixes + mic-only recording crash fix |
 | v2.6.0 | **Three-track architecture** — eliminated audio mixing distortion |
 | v2.6.1 | Color pipeline fix + per-app audio restoration + English UI + polish |
+| v2.6.2 | Menu bar integration + mic hardware detection + system language auto-follow + UI polish |
 
 ---
 

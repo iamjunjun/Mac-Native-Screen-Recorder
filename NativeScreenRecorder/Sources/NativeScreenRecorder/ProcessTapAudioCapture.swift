@@ -83,6 +83,16 @@ final class ProcessTapAudioCapture: @unchecked Sendable {
         isPrepared = false
     }
 
+    func pause() {
+        guard let ioProcID else { return }
+        _ = AudioDeviceStop(aggregateDeviceID, ioProcID)
+    }
+
+    func resume() {
+        guard let ioProcID else { return }
+        _ = AudioDeviceStart(aggregateDeviceID, ioProcID)
+    }
+
     @available(macOS 14.2, *)
     private func makeTapDescription() throws -> CATapDescription {
         switch target {

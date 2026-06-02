@@ -7,9 +7,9 @@ struct MenuBarView: View {
         VStack(spacing: 8) {
             HStack {
                 Circle()
-                    .fill(store.isRecording ? .red : .green)
+                    .fill(store.isPaused ? .yellow : (store.isRecording ? .red : .green))
                     .frame(width: 8, height: 8)
-                Text(store.isRecording ? "recording" : "ready", bundle: .module)
+                Text(store.isPaused ? "paused" : (store.isRecording ? "recording" : "ready"), bundle: .module)
                     .font(.headline)
             }
             .padding(.bottom, 4)
@@ -43,6 +43,30 @@ struct MenuBarView: View {
             .background(Color.clear)
             .contentShape(Rectangle())
             .keyboardShortcut("r", modifiers: .command)
+
+            if store.isRecording {
+                Divider()
+
+                Button {
+                    if store.isPaused {
+                        store.resumeRecording()
+                    } else {
+                        store.pauseRecording()
+                    }
+                } label: {
+                    HStack {
+                        Image(systemName: store.isPaused ? "play.fill" : "pause.fill")
+                        Text(store.isPaused ? "resume_recording" : "pause_recording", bundle: .module)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .buttonStyle(.plain)
+                .padding(.vertical, 6)
+                .padding(.horizontal, 8)
+                .background(Color.clear)
+                .contentShape(Rectangle())
+                .keyboardShortcut("p", modifiers: .command)
+            }
 
             Divider()
 

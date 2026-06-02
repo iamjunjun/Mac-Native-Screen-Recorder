@@ -17,6 +17,7 @@ final class MovieFileWriter: @unchecked Sendable {
     private var pixelTransferSession: VTPixelTransferSession?
     private var outputBufferPool: CVPixelBufferPool?
     private var cachedFormatDescription: CMVideoFormatDescription?
+    private var accumulatedPauseDuration: Double = 0
 
     init(outputURL: URL, width: Int, height: Int,
          systemAudioFormat: AudioStreamBasicDescription? = nil,
@@ -121,6 +122,10 @@ final class MovieFileWriter: @unchecked Sendable {
         }
     }
 
+    func addPauseDuration(_ duration: Double) {
+        accumulatedPauseDuration += duration
+    }
+
     func append(_ sampleBuffer: CMSampleBuffer, mediaType: AVMediaType) {
         guard !didFinish else { return }
         guard CMSampleBufferDataIsReady(sampleBuffer) else { return }
@@ -132,12 +137,15 @@ final class MovieFileWriter: @unchecked Sendable {
             didStartSession = true
         }
 
+        // Apply pause time offset
+        let adjustedBuffer = applyPauseOffset(to: sampleBuffer)
+
         switch mediaType {
         case .video:
             guard videoInput.isReadyForMoreMediaData else { return }
             if let session = pixelTransferSession,
                let pool = outputBufferPool,
-               let inputPixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) {
+               let inputPixelBuffer = CMSampleBufferGetImageBuffer(adjustedBuffer) {
                 var outputPixelBuffer: CVPixelBuffer?
                 CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault, pool, &outputPixelBuffer)
                 if let output = outputPixelBuffer {
@@ -148,9 +156,9 @@ final class MovieFileWriter: @unchecked Sendable {
                     }
                     if let desc = cachedFormatDescription {
                         var timing = CMSampleTimingInfo(
-                            duration: CMSampleBufferGetDuration(sampleBuffer),
-                            presentationTimeStamp: CMSampleBufferGetPresentationTimeStamp(sampleBuffer),
-                            decodeTimeStamp: CMSampleBufferGetDecodeTimeStamp(sampleBuffer)
+                            duration: CMSampleBufferGetDuration(adjustedBuffer),
+                            presentationTimeStamp: CMSampleBufferGetPresentationTimeStamp(adjustedBuffer),
+                            decodeTimeStamp: CMSampleBufferGetDecodeTimeStamp(adjustedBuffer)
                         )
                         var converted: CMSampleBuffer?
                         CMSampleBufferCreateReadyWithImageBuffer(
@@ -167,10 +175,10 @@ final class MovieFileWriter: @unchecked Sendable {
                     }
                 }
             }
-            _ = videoInput.append(sampleBuffer)
+            _ = videoInput.append(adjustedBuffer)
         case .audio:
             guard let input = systemAudioInput, input.isReadyForMoreMediaData else { return }
-            _ = input.append(sampleBuffer)
+            _ = input.append(adjustedBuffer)
         default:
             break
         }
@@ -187,6 +195,9 @@ final class MovieFileWriter: @unchecked Sendable {
             didStartSession = true
         }
 
+        // Apply pause time offset
+        let adjustedBuffer = applyPauseOffset(to: sampleBuffer)
+
         let input: AVAssetWriterInput?
         switch track {
         case .systemAudio:  input = systemAudioInput
@@ -194,7 +205,29 @@ final class MovieFileWriter: @unchecked Sendable {
         }
 
         guard let input, input.isReadyForMoreMediaData else { return }
-        _ = input.append(sampleBuffer)
+        _ = input.append(adjustedBuffer)
+    }
+
+    private func applyPauseOffset(to sampleBuffer: CMSampleBuffer) -> CMSampleBuffer {
+        guard accumulatedPauseDuration > 0 else { return sampleBuffer }
+
+        let offset = CMTime(seconds: accumulatedPauseDuration, preferredTimescale: 1_000_000_000)
+        var timing = CMSampleTimingInfo(
+            duration: CMSampleBufferGetDuration(sampleBuffer),
+            presentationTimeStamp: CMTimeSubtract(CMSampleBufferGetPresentationTimeStamp(sampleBuffer), offset),
+            decodeTimeStamp: CMTimeSubtract(CMSampleBufferGetDecodeTimeStamp(sampleBuffer), offset)
+        )
+
+        var adjusted: CMSampleBuffer?
+        CMSampleBufferCreateCopyWithNewTiming(
+            allocator: kCFAllocatorDefault,
+            sampleBuffer: sampleBuffer,
+            sampleTimingEntryCount: 1,
+            sampleTimingArray: &timing,
+            sampleBufferOut: &adjusted
+        )
+
+        return adjusted ?? sampleBuffer
     }
 
     func finish() async throws {

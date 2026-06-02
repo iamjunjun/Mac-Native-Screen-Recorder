@@ -88,7 +88,7 @@ Full Chinese and English interfaces, switched at compile time via the `-DENGLISH
 
 | Version | Link |
 |---------|------|
-| v2.6.4 (latest) | [NativeScreenRecorder_v2.6.4.zip](Releases/NativeScreenRecorder_v2.6.4.zip) |
+| v2.6.5 (latest) | [NativeScreenRecorder_v2.6.5.zip](Releases/NativeScreenRecorder_v2.6.5.zip) |
 
 Unzip and drag the `.app` bundle into your Applications folder. The app automatically follows your system language — Chinese or English.
 
@@ -161,6 +161,7 @@ swift build -c release -Xswiftc -DENGLISH
 | v2.6.2 | Menu bar integration + mic hardware detection + system language auto-follow + UI polish |
 | v2.6.3 | **High-performance zero-copy encoding** — IOSurface zero-copy pipeline + CQ encoding + adaptive frame rate, CPU usage dropped from 120-150% to 10-15% |
 | v2.6.4 | Menu bar and UI interaction fixes |
+| v2.6.5 | **Pause recording** — pause/resume from menu bar or main window, Cmd+P shortcut |
 
 ---
 

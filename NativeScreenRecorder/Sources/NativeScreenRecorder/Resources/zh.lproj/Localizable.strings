@@ -19,6 +19,18 @@
 /* 停止录制 */
 "stop_recording" = "停止录制";
 
+/* 暂停录制 */
+"pause_recording" = "暂停录制";
+
+/* 恢复录制 */
+"resume_recording" = "恢复录制";
+
+/* 已暂停 */
+"paused" = "已暂停";
+
+/* 录制已暂停 */
+"recording_paused" = "录制已暂停";
+
 /* 麦克风 */
 "microphone" = "麦克风";
 

@@ -19,6 +19,18 @@
 /* Stop Recording */
 "stop_recording" = "Stop Recording";
 
+/* Pause Recording */
+"pause_recording" = "Pause Recording";
+
+/* Resume Recording */
+"resume_recording" = "Resume Recording";
+
+/* Paused */
+"paused" = "Paused";
+
+/* Recording paused */
+"recording_paused" = "Recording paused";
+
 /* Microphone */
 "microphone" = "Microphone";
 

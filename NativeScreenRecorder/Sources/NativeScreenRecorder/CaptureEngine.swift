@@ -38,6 +38,10 @@ final class CaptureEngine: NSObject, @unchecked Sendable {
     private var writer: MovieFileWriter?
     private var processTap: ProcessTapAudioCapture?
     private var isRecording = false
+    // Layer 3: Adaptive frame rate — skip frames when screen is static
+    private var lastVideoTime: CMTime = .zero
+    private var minFrameInterval: Double = 1.0 / 30.0
+    private var skippedFrames: Int = 0
 
     func start(request: RecordingRequest) async throws {
         guard !isRecording else { throw CaptureEngineError.alreadyRecording }
@@ -60,11 +64,14 @@ final class CaptureEngine: NSObject, @unchecked Sendable {
         // Configure stream
         let configuration = SCStreamConfiguration()
         configuration.minimumFrameInterval = CMTime(value: 1, timescale: 30)
-        configuration.queueDepth = 6
+        configuration.queueDepth = 3
         configuration.showsCursor = true
         configuration.excludesCurrentProcessAudio = true
         configuration.pixelFormat = kCVPixelFormatType_32BGRA
         configuration.scalesToFit = false
+        if #available(macOS 14.0, *) {
+            configuration.captureDynamicRange = SCCaptureDynamicRange(rawValue: 0)!
+        }
 
         let pointScale = CGFloat(pixelWidth) / CGFloat(display.width)
         let writerWidth: Int
@@ -211,6 +218,25 @@ extension CaptureEngine: SCStreamOutput {
         switch outputType {
         case .screen:
             guard sampleBuffer.isCompleteScreenFrame else { return }
+            let pts = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
+            // Layer 3: Adaptive frame rate — skip frames when screen is static
+            if lastVideoTime.isValid {
+                let elapsed = CMTimeGetSeconds(CMTimeSubtract(pts, lastVideoTime))
+                if elapsed < minFrameInterval {
+                    skippedFrames += 1
+                    // Static for 1 second → drop to 15fps
+                    if skippedFrames > 30 && minFrameInterval < 1.0 / 15.0 {
+                        minFrameInterval = 1.0 / 15.0
+                    }
+                    return
+                }
+            }
+            // Content is dynamic — restore 30fps immediately
+            if skippedFrames > 0 {
+                minFrameInterval = 1.0 / 30.0
+            }
+            skippedFrames = 0
+            lastVideoTime = pts
             writer?.append(sampleBuffer, mediaType: .video)
         case .audio:
             writer?.append(sampleBuffer, to: .systemAudio)

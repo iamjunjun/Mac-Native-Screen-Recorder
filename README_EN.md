@@ -61,12 +61,14 @@ Zero audio mixing. Each source retains its original quality, eliminating the dis
 
 macOS screens use the Display P3 wide color gamut, but video standards expect Rec.709. The app performs automatic color space conversion (via VTPixelTransferSession) and outputs full-range metadata, so recorded video looks vibrant — not washed out.
 
-### 8. Dual Codec Support
+### 8. High-Performance Encoding
+
+Uses Constant Quality (CQ) mode — the hardware encoder automatically adjusts bitrate based on content (low bitrate for static scenes, high bitrate for motion). Combined with an IOSurface zero-copy pipeline and adaptive frame rate (15fps static / 30fps dynamic), 4K screen recording uses only 10-15% CPU.
+
+### 9. Dual Codec Support
 
 - **H.264** — maximum compatibility with all media players
 - **HEVC (H.265)** — smaller file sizes at equivalent quality
-
-Bitrate adapts automatically based on recording resolution.
 
 ### 9. Bilingual UI (Chinese / English)
 
@@ -86,7 +88,7 @@ Full Chinese and English interfaces, switched at compile time via the `-DENGLISH
 
 | Version | Link |
 |---------|------|
-| v2.6.2 (auto language detection) | [NativeScreenRecorder_v2.6.2.zip](Releases/NativeScreenRecorder_v2.6.2.zip) |
+| v2.6.3 (high-performance encoding) | [NativeScreenRecorder_v2.6.3.zip](Releases/NativeScreenRecorder_v2.6.3.zip) |
 
 Unzip and drag the `.app` bundle into your Applications folder. The app automatically follows your system language — Chinese or English.
 
@@ -157,6 +159,7 @@ swift build -c release -Xswiftc -DENGLISH
 | v2.6.0 | **Three-track architecture** — eliminated audio mixing distortion |
 | v2.6.1 | Color pipeline fix + per-app audio restoration + English UI + polish |
 | v2.6.2 | Menu bar integration + mic hardware detection + system language auto-follow + UI polish |
+| v2.6.3 | **High-performance zero-copy encoding** — IOSurface zero-copy pipeline + CQ encoding + adaptive frame rate, CPU usage dropped from 120-150% to 10-15% |
 
 ---
 

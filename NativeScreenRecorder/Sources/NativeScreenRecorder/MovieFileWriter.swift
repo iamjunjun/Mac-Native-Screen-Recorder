@@ -15,6 +15,8 @@ final class MovieFileWriter: @unchecked Sendable {
     private var didStartSession = false
     private var didFinish = false
     private var pixelTransferSession: VTPixelTransferSession?
+    private var outputBufferPool: CVPixelBufferPool?
+    private var cachedFormatDescription: CMVideoFormatDescription?
 
     init(outputURL: URL, width: Int, height: Int,
          systemAudioFormat: AudioStreamBasicDescription? = nil,
@@ -26,26 +28,25 @@ final class MovieFileWriter: @unchecked Sendable {
 
         writer = try AVAssetWriter(outputURL: outputURL, fileType: .mp4)
 
-        let pixelCount = width * height
-        let (codecType, profileLevel, bitRate): (AVVideoCodecType, String, Int) = {
+        let (codecType, profileLevel): (AVVideoCodecType, String) = {
             switch videoCodec {
             case .h264:
-                let bitRate: Int
-                if pixelCount <= 1280 * 720       { bitRate =  3_000_000 }
-                else if pixelCount <= 1920 * 1080 { bitRate =  6_000_000 }
-                else if pixelCount <= 2560 * 1440 { bitRate = 12_000_000 }
-                else                              { bitRate = 25_000_000 }
-                return (.h264, AVVideoProfileLevelH264HighAutoLevel, bitRate)
+                return (.h264, AVVideoProfileLevelH264HighAutoLevel)
             case .hevc:
-                let bitRate: Int
-                if pixelCount <= 1280 * 720       { bitRate =  2_000_000 }
-                else if pixelCount <= 1920 * 1080 { bitRate =  4_000_000 }
-                else if pixelCount <= 2560 * 1440 { bitRate =  7_000_000 }
-                else                              { bitRate = 15_000_000 }
-                return (.hevc, kVTProfileLevel_HEVC_Main_AutoLevel as String, bitRate)
+                return (.hevc, kVTProfileLevel_HEVC_Main_AutoLevel as String)
             }
         }()
 
+        // Layer 1: Constant Quality (CQ) mode
+        let compressionProps: [String: Any] = [
+            AVVideoMaxKeyFrameIntervalKey: 60,
+            AVVideoMaxKeyFrameIntervalDurationKey: 2.0,
+            AVVideoProfileLevelKey: profileLevel,
+            AVVideoAllowFrameReorderingKey: false,
+            AVVideoQualityKey: 0.85
+        ]
+
+        // Output: Rec.709 color space, full range
         let videoSettings: [String: Any] = [
             AVVideoCodecKey: codecType,
             AVVideoWidthKey: width,
@@ -59,30 +60,33 @@ final class MovieFileWriter: @unchecked Sendable {
                 AVVideoTransferFunctionKey: AVVideoTransferFunction_ITU_R_709_2,
                 AVVideoYCbCrMatrixKey: AVVideoYCbCrMatrix_ITU_R_709_2
             ],
-            AVVideoCompressionPropertiesKey: [
-                AVVideoAverageBitRateKey: bitRate,
-                AVVideoProfileLevelKey: profileLevel,
-                AVVideoAllowFrameReorderingKey: true
-            ]
+            AVVideoCompressionPropertiesKey: compressionProps
         ]
 
         videoInput = AVAssetWriterInput(mediaType: .video, outputSettings: videoSettings)
         videoInput.expectsMediaDataInRealTime = true
 
-        // Color space conversion: Display P3 (macOS screen) → Rec.709 (video standard)
+        // Color calibration: Display P3 BGRA → Rec.709 BGRA (GPU-accelerated, IOSurface-backed)
         var session: VTPixelTransferSession?
         let status = VTPixelTransferSessionCreate(allocator: kCFAllocatorDefault, pixelTransferSessionOut: &session)
         if status == noErr, let session {
-            let keys: [(String, String)] = [
-                ("DestinationColorPrimaries", AVVideoColorPrimaries_ITU_R_709_2),
-                ("DestinationTransferFunction", AVVideoTransferFunction_ITU_R_709_2),
-                ("DestinationYCbCrMatrix", AVVideoYCbCrMatrix_ITU_R_709_2)
-            ]
-            for (key, value) in keys {
-                VTSessionSetProperty(session, key: key as CFString, value: value as CFTypeRef)
-            }
+            VTSessionSetProperty(session, key: "EnableGPUAcceleratedTransfer" as CFString, value: kCFBooleanTrue)
+            VTSessionSetProperty(session, key: "DestinationColorPrimaries" as CFString, value: AVVideoColorPrimaries_ITU_R_709_2 as CFTypeRef)
+            VTSessionSetProperty(session, key: "DestinationTransferFunction" as CFString, value: AVVideoTransferFunction_ITU_R_709_2 as CFTypeRef)
+            VTSessionSetProperty(session, key: "DestinationYCbCrMatrix" as CFString, value: AVVideoYCbCrMatrix_ITU_R_709_2 as CFTypeRef)
             self.pixelTransferSession = session
         }
+
+        // IOSurface-backed pool — zero-copy between GPU transfer and hardware encoder
+        var pool: CVPixelBufferPool?
+        let poolAttrs: [String: Any] = [
+            kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
+            kCVPixelBufferWidthKey as String: width,
+            kCVPixelBufferHeightKey as String: height,
+            kCVPixelBufferIOSurfacePropertiesKey as String: [:] as [String: Any]
+        ]
+        CVPixelBufferPoolCreate(kCFAllocatorDefault, nil, poolAttrs as CFDictionary, &pool)
+        self.outputBufferPool = pool
 
         // System audio track
         if let fmt = systemAudioFormat {
@@ -132,26 +136,22 @@ final class MovieFileWriter: @unchecked Sendable {
         case .video:
             guard videoInput.isReadyForMoreMediaData else { return }
             if let session = pixelTransferSession,
+               let pool = outputBufferPool,
                let inputPixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) {
                 var outputPixelBuffer: CVPixelBuffer?
-                CVPixelBufferCreate(
-                    kCFAllocatorDefault,
-                    CVPixelBufferGetWidth(inputPixelBuffer),
-                    CVPixelBufferGetHeight(inputPixelBuffer),
-                    CVPixelBufferGetPixelFormatType(inputPixelBuffer),
-                    nil,
-                    &outputPixelBuffer
-                )
+                CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault, pool, &outputPixelBuffer)
                 if let output = outputPixelBuffer {
+                    // GPU: Display P3 → Rec.709, stays in IOSurface (zero-copy)
                     VTPixelTransferSessionTransferImage(session, from: inputPixelBuffer, to: output)
-                    var timing = CMSampleTimingInfo(
-                        duration: CMSampleBufferGetDuration(sampleBuffer),
-                        presentationTimeStamp: CMSampleBufferGetPresentationTimeStamp(sampleBuffer),
-                        decodeTimeStamp: CMSampleBufferGetDecodeTimeStamp(sampleBuffer)
-                    )
-                    var formatDescription: CMVideoFormatDescription?
-                    CMVideoFormatDescriptionCreateForImageBuffer(allocator: kCFAllocatorDefault, imageBuffer: output, formatDescriptionOut: &formatDescription)
-                    if let desc = formatDescription {
+                    if cachedFormatDescription == nil {
+                        CMVideoFormatDescriptionCreateForImageBuffer(allocator: kCFAllocatorDefault, imageBuffer: output, formatDescriptionOut: &cachedFormatDescription)
+                    }
+                    if let desc = cachedFormatDescription {
+                        var timing = CMSampleTimingInfo(
+                            duration: CMSampleBufferGetDuration(sampleBuffer),
+                            presentationTimeStamp: CMSampleBufferGetPresentationTimeStamp(sampleBuffer),
+                            decodeTimeStamp: CMSampleBufferGetDecodeTimeStamp(sampleBuffer)
+                        )
                         var converted: CMSampleBuffer?
                         CMSampleBufferCreateReadyWithImageBuffer(
                             allocator: kCFAllocatorDefault,

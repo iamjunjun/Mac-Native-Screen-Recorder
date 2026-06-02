@@ -82,6 +82,13 @@ enum L {
     static var selectAppForAudio: String { language == .english ? "Please select an application for audio capture." : "请选择要录制声音的应用。" }
     static var selectAreaFirst: String { language == .english ? "Please select a recording area first." : "请先拖选录制区域。" }
 
+    // MARK: - Menu Bar
+    static var openMainWindow: String { language == .english ? "Open Main Window" : "打开主窗口" }
+    static var quit: String { language == .english ? "Quit" : "退出" }
+
+    // MARK: - Microphone Warning
+    static var noMicrophoneHardware: String { language == .english ? "No microphone detected on this device" : "未检测到麦克风设备" }
+
     // MARK: - CaptureEngine Errors
     static var noDisplayFound: String { language == .english ? "No display found for recording." : "找不到要录制的显示器。" }
     static var appNotFound: String { language == .english ? "Application not found. It may have quit or has no capturable windows." : "找不到要录制的应用，它可能已经退出或没有可捕获窗口。" }

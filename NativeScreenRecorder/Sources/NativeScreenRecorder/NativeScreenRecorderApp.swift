@@ -2,6 +2,7 @@ import SwiftUI
 
 @main
 struct NativeScreenRecorderApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @StateObject private var store = RecorderStore()
 
     var body: some Scene {
@@ -18,5 +19,12 @@ struct NativeScreenRecorderApp: App {
         }
         .defaultSize(width: 1040, height: 760)
         .windowResizability(.contentMinSize)
+
+        MenuBarExtra {
+            MenuBarView(store: store)
+        } label: {
+            Image(systemName: store.isRecording ? "record.circle.fill" : "record.circle")
+                .foregroundStyle(store.isRecording ? .red : .primary)
+        }
     }
 }

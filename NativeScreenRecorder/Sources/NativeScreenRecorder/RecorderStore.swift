@@ -1,6 +1,7 @@
 import Foundation
 import AppKit
 import ScreenCaptureKit
+import CoreAudio
 
 @MainActor
 final class RecorderStore: ObservableObject {
@@ -18,6 +19,7 @@ final class RecorderStore: ObservableObject {
     @Published var statusText = L.readyToRecord
     @Published var errorText: String?
     @Published var elapsedTime: TimeInterval = 0
+    @Published var micWarningText: String?
 
     private let captureEngine = CaptureEngine()
     private var recordingAreaOverlay: NSWindow?
@@ -97,6 +99,73 @@ final class RecorderStore: ObservableObject {
         }
         applications = allAppOptions.sorted {
             $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+        }
+    }
+
+    func checkMicrophoneHardware() {
+        var propertyAddress = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDefaultInputDevice,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+
+        var deviceID: AudioDeviceID = 0
+        var dataSize = UInt32(MemoryLayout<AudioDeviceID>.size)
+
+        let status = AudioObjectGetPropertyData(
+            AudioObjectID(kAudioObjectSystemObject),
+            &propertyAddress,
+            0, nil,
+            &dataSize,
+            &deviceID
+        )
+
+        if status != noErr || deviceID == kAudioObjectUnknown {
+            micWarningText = L.noMicrophoneHardware
+            isMicrophoneEnabled = false
+            return
+        }
+
+        // 检查设备名称，确认不是虚拟设备
+        var nameAddress = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyDeviceNameCFString,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+
+        var name: Unmanaged<CFString>?
+        var nameSize = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
+
+        let nameStatus = AudioObjectGetPropertyData(
+            deviceID,
+            &nameAddress,
+            0, nil,
+            &nameSize,
+            &name
+        )
+
+        if nameStatus == noErr, let cfName = name?.takeRetainedValue() {
+            let deviceName = cfName as String
+            // 检查是否是有效的输入设备
+            if deviceName.isEmpty {
+                micWarningText = L.noMicrophoneHardware
+                isMicrophoneEnabled = false
+                return
+            }
+        }
+
+        micWarningText = nil
+    }
+
+    func toggleMicrophone() {
+        if isMicrophoneEnabled {
+            isMicrophoneEnabled = false
+            micWarningText = nil
+        } else {
+            checkMicrophoneHardware()
+            if micWarningText == nil {
+                isMicrophoneEnabled = true
+            }
         }
     }
 

@@ -180,7 +180,10 @@ struct ContentView: View {
                 title: L.microphone,
                 systemImage: "mic",
                 tint: .gray,
-                isOn: $store.isMicrophoneEnabled
+                isOn: Binding(
+                    get: { store.isMicrophoneEnabled },
+                    set: { _ in store.toggleMicrophone() }
+                )
             )
             .disabled(store.isRecording)
 
@@ -373,7 +376,15 @@ struct ContentView: View {
 
                 Spacer()
 
-
+                if let micWarning = store.micWarningText {
+                    HStack(spacing: 6) {
+                        Image(systemName: "mic.slash.fill")
+                            .foregroundStyle(.orange)
+                        Text(micWarning)
+                            .font(.callout)
+                            .foregroundStyle(.orange)
+                    }
+                }
             }
             .padding(.horizontal, 4)
         }

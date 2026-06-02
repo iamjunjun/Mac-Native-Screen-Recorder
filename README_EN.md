@@ -10,11 +10,11 @@ A pure macOS-native screen recording tool. No virtual audio drivers (BlackHole) 
 
 ### Chinese UI
 
-![Chinese UI](Screenshots/中文版界面.png)
+![Chinese UI](Screenshots/中文界面.png)
 
 ### English UI
 
-![English UI](Screenshots/英文版界面.png)
+![English UI](Screenshots/英文界面.png)
 
 ---
 

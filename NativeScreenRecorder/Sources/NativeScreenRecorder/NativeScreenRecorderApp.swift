@@ -19,6 +19,7 @@ struct NativeScreenRecorderApp: App {
         }
         .defaultSize(width: 1040, height: 760)
         .windowResizability(.contentMinSize)
+        .windowStyle(.hiddenTitleBar)
 
         MenuBarExtra {
             MenuBarView(store: store)

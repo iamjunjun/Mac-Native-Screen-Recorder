@@ -9,17 +9,17 @@ enum AudioCaptureMode: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .none:             return L.off
-        case .globalSystem:     return L.globalSystemAudio
-        case .selectedApplication: return L.appAudio
+        case .none:             return .localized("off")
+        case .globalSystem:     return .localized("global_system_audio")
+        case .selectedApplication: return .localized("app_audio")
         }
     }
 
     var detail: String {
         switch self {
-        case .none:             return L.noSystemAudio
-        case .globalSystem:     return L.globalSystemAudioDetail
-        case .selectedApplication: return L.appAudioDetail
+        case .none:             return .localized("no_system_audio")
+        case .globalSystem:     return .localized("global_system_audio_detail")
+        case .selectedApplication: return .localized("app_audio_detail")
         }
     }
 }
@@ -32,8 +32,8 @@ enum CaptureMode: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .fullScreen: return L.fullScreen
-        case .area:       return L.areaSelect
+        case .fullScreen: return .localized("full_screen")
+        case .area:       return .localized("area_select")
         }
     }
 }

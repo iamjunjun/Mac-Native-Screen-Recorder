@@ -4,6 +4,7 @@ import PackageDescription
 
 let package = Package(
     name: "NativeScreenRecorder",
+    defaultLocalization: "zh",
     platforms: [
         .macOS(.v15)
     ],
@@ -13,7 +14,10 @@ let package = Package(
     targets: [
         .executableTarget(
             name: "NativeScreenRecorder",
-            path: "Sources/NativeScreenRecorder"
+            path: "Sources/NativeScreenRecorder",
+            resources: [
+                .process("Resources")
+            ]
         )
     ]
 )

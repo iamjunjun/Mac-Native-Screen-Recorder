@@ -9,7 +9,7 @@ struct MenuBarView: View {
                 Circle()
                     .fill(store.isRecording ? .red : .green)
                     .frame(width: 8, height: 8)
-                Text(store.isRecording ? L.recording : L.ready)
+                Text(store.isRecording ? "recording" : "ready", bundle: .module)
                     .font(.headline)
             }
             .padding(.bottom, 4)
@@ -33,7 +33,7 @@ struct MenuBarView: View {
             } label: {
                 HStack {
                     Image(systemName: store.isRecording ? "stop.fill" : "record.circle")
-                    Text(store.isRecording ? L.stopRecording : L.startRecording)
+                    Text(store.isRecording ? "stop_recording" : "start_recording", bundle: .module)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -51,7 +51,7 @@ struct MenuBarView: View {
             } label: {
                 HStack {
                     Image(systemName: "macwindow")
-                    Text(L.openMainWindow)
+                    Text("open_main_window", bundle: .module)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
@@ -69,7 +69,7 @@ struct MenuBarView: View {
             } label: {
                 HStack {
                     Image(systemName: "power")
-                    Text(L.quit)
+                    Text("quit", bundle: .module)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }

@@ -28,13 +28,13 @@ enum CoreAudioError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .operationFailed(let operation, let status):
-            return String(format: L.operationFailed, operation, status)
+            return String.localized("operation_failed \(operation) \(status)")
         case .processObjectNotFound(let pid):
-            return String(format: L.processObjectNotFound, pid)
+            return String.localized("process_object_not_found \(pid)")
         case .tapUIDUnavailable:
-            return L.tapUIDUnavailable
+            return String.localized("tap_uid_unavailable")
         case .invalidAudioFormat:
-            return L.invalidAudioFormat
+            return String.localized("invalid_audio_format")
         }
     }
 }

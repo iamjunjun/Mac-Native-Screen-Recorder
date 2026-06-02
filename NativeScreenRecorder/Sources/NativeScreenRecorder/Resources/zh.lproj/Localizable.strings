@@ -1,0 +1,191 @@
+/* 原生录屏 */
+"app_title" = "原生录屏";
+
+/* 不影响当前声音播放，无需安装驱动 */
+"subtitle" = "不影响当前声音播放，无需安装驱动";
+
+/* 刷新设备与应用列表 */
+"refresh_tooltip" = "刷新设备与应用列表";
+
+/* 全屏 */
+"full_screen" = "全屏";
+
+/* 区域 */
+"custom_area" = "区域";
+
+/* 开始录制 */
+"start_recording" = "开始录制";
+
+/* 停止录制 */
+"stop_recording" = "停止录制";
+
+/* 麦克风 */
+"microphone" = "麦克风";
+
+/* 系统 */
+"system_audio" = "系统";
+
+/* 录制模式 */
+"capture_mode" = "录制模式";
+
+/* 拖选区域 */
+"select_area" = "拖选区域";
+
+/* 显示器 */
+"display" = "显示器";
+
+/* 声音来源 */
+"audio_source" = "声音来源";
+
+/* 应用 */
+"application" = "应用";
+
+/* 全局 */
+"global" = "全局";
+
+/* 区域 */
+"area_select" = "区域";
+
+/* 全局系统 */
+"global_system_audio" = "全局系统";
+
+/* 指定应用 */
+"app_audio" = "指定应用";
+
+/* 编码 */
+"encoding" = "编码";
+
+/* 视频编码 */
+"video_codec" = "视频编码";
+
+/* 存储 */
+"storage" = "存储";
+
+/* 选择保存位置 */
+"choose_save_location" = "选择保存位置";
+
+/* 打开保存位置 */
+"open_save_location" = "打开保存位置";
+
+/* 录制中 */
+"recording" = "录制中";
+
+/* 就绪 */
+"ready" = "就绪";
+
+/* 准备录制 */
+"ready_to_record" = "准备录制";
+
+/* 已刷新可录制内容 */
+"content_refreshed" = "已刷新可录制内容";
+
+/* 无法读取可录制内容 */
+"failed_to_read_content" = "无法读取可录制内容";
+
+/* 正在录制到 %@ */
+"recording_to %@" = "正在录制到 %@";
+
+/* 启动录制失败 */
+"failed_to_start" = "启动录制失败";
+
+/* 录制完成：%@ */
+"recording_saved %@" = "录制完成：%@";
+
+/* 停止录制时出错 */
+"error_stopping" = "停止录制时出错";
+
+/* 点击图标拖选录制区域 */
+"click_to_select_area" = "点击图标拖选录制区域";
+
+/* 已选区域：%lld × %lld */
+"selected_area %lld %lld" = "已选区域：%lld × %lld";
+
+/* 已选择区域：%lld × %lld */
+"area_selected %lld %lld" = "已选择区域：%lld × %lld";
+
+/* 显示器 %lld */
+"display_title %lld" = "显示器 %lld";
+
+/* 未命名应用 */
+"unnamed_app" = "未命名应用";
+
+/* 选择显示器 */
+"select_display" = "选择显示器";
+
+/* 选择应用 */
+"select_application" = "选择应用";
+
+/* 选择 */
+"select" = "选择";
+
+/* 打开系统设置 */
+"open_system_settings" = "打开系统设置";
+
+/* 屏幕录制权限未授权（TCC 拒绝）。
+请在系统设置 → 隐私与安全性 → 屏幕录制中允许本应用，然后重新打开应用。
+
+调试信息：%@ */
+"screen_recording_denied %@" = "屏幕录制权限未授权（TCC 拒绝）。\n请在系统设置 → 隐私与安全性 → 屏幕录制中允许本应用，然后重新打开应用。\n\n调试信息：%@";
+
+/* 没有可用显示器。请先点刷新。 */
+"no_display_error" = "没有可用显示器。请先点刷新。";
+
+/* 请选择要录制声音的应用。 */
+"select_app_for_audio" = "请选择要录制声音的应用。";
+
+/* 请先拖选录制区域。 */
+"select_area_first" = "请先拖选录制区域。";
+
+/* 打开主窗口 */
+"open_main_window" = "打开主窗口";
+
+/* 退出 */
+"quit" = "退出";
+
+/* 未检测到麦克风设备 */
+"no_microphone_hardware" = "未检测到麦克风设备";
+
+/* 找不到要录制的显示器。 */
+"no_display_found" = "找不到要录制的显示器。";
+
+/* 找不到要录制的应用，它可能已经退出或没有可捕获窗口。 */
+"app_not_found" = "找不到要录制的应用，它可能已经退出或没有可捕获窗口。";
+
+/* 当前已经在录制。 */
+"already_recording" = "当前已经在录制。";
+
+/* 当前没有正在进行的录制。 */
+"not_recording" = "当前没有正在进行的录制。";
+
+/* 录制流已停止。 */
+"stream_stopped" = "录制流已停止。";
+
+/* Core Audio Process Tap 需要 macOS 14.2 或更新版本。 */
+"process_tap_unavailable" = "Core Audio Process Tap 需要 macOS 14.2 或更新版本。";
+
+/* 麦克风权限未授权，请在系统设置 → 隐私与安全性 → 麦克风中允许本应用。 */
+"mic_permission_denied" = "麦克风权限未授权，请在系统设置 → 隐私与安全性 → 麦克风中允许本应用。";
+
+/* %@ 失败，CoreAudio 状态码：%lld。 */
+"operation_failed %lld" = "%@ 失败，CoreAudio 状态码：%lld。";
+
+/* 找不到进程 %lld 对应的 CoreAudio 对象。请确认该应用正在播放或已经初始化音频。 */
+"process_object_not_found %lld" = "找不到进程 %lld 对应的 CoreAudio 对象。请确认该应用正在播放或已经初始化音频。";
+
+/* 无法读取 Process Tap 的 UID。 */
+"tap_uid_unavailable" = "无法读取 Process Tap 的 UID。";
+
+/* Process Tap 返回了无法写入的音频格式。 */
+"invalid_audio_format" = "Process Tap 返回了无法写入的音频格式。";
+
+/* 关闭 */
+"off" = "关闭";
+
+/* 不录制系统音频。 */
+"no_system_audio" = "不录制系统音频。";
+
+/* 录制整台 Mac 正在播放的系统音频，不改变当前扬声器或耳机。 */
+"global_system_audio_detail" = "录制整台 Mac 正在播放的系统音频，不改变当前扬声器或耳机。";
+
+/* 只捕获所选应用的窗口内容和音频，适合录浏览器、播放器或会议应用。 */
+"app_audio_detail" = "只捕获所选应用的窗口内容和音频，适合录浏览器、播放器或会议应用。";

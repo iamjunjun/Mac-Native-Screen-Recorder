@@ -1,0 +1,191 @@
+/* Native Screen Recorder */
+"app_title" = "Native Screen Recorder";
+
+/* No impact on audio, no driver needed */
+"subtitle" = "No impact on audio, no driver needed";
+
+/* Refresh devices and applications */
+"refresh_tooltip" = "Refresh devices and applications";
+
+/* Full Screen */
+"full_screen" = "Full Screen";
+
+/* Area */
+"custom_area" = "Area";
+
+/* Start Recording */
+"start_recording" = "Start Recording";
+
+/* Stop Recording */
+"stop_recording" = "Stop Recording";
+
+/* Microphone */
+"microphone" = "Microphone";
+
+/* System */
+"system_audio" = "System";
+
+/* Capture Mode */
+"capture_mode" = "Capture Mode";
+
+/* Select Area */
+"select_area" = "Select Area";
+
+/* Display */
+"display" = "Display";
+
+/* Audio Source */
+"audio_source" = "Audio Source";
+
+/* Application */
+"application" = "Application";
+
+/* Global */
+"global" = "Global";
+
+/* Area */
+"area_select" = "Area";
+
+/* System */
+"global_system_audio" = "System";
+
+/* App */
+"app_audio" = "App";
+
+/* Encoding */
+"encoding" = "Encoding";
+
+/* Video Codec */
+"video_codec" = "Video Codec";
+
+/* Storage */
+"storage" = "Storage";
+
+/* Choose save location */
+"choose_save_location" = "Choose save location";
+
+/* Open save location */
+"open_save_location" = "Open save location";
+
+/* Recording */
+"recording" = "Recording";
+
+/* Ready */
+"ready" = "Ready";
+
+/* Ready to record */
+"ready_to_record" = "Ready to record";
+
+/* Content refreshed */
+"content_refreshed" = "Content refreshed";
+
+/* Failed to read capturable content */
+"failed_to_read_content" = "Failed to read capturable content";
+
+/* Recording to %@ */
+"recording_to %@" = "Recording to %@";
+
+/* Failed to start recording */
+"failed_to_start" = "Failed to start recording";
+
+/* Recording saved: %@ */
+"recording_saved %@" = "Recording saved: %@";
+
+/* Error stopping recording */
+"error_stopping" = "Error stopping recording";
+
+/* Click and drag to select area */
+"click_to_select_area" = "Click and drag to select area";
+
+/* Selected: %lld × %lld */
+"selected_area %lld %lld" = "Selected: %lld × %lld";
+
+/* Area selected: %lld × %lld */
+"area_selected %lld %lld" = "Area selected: %lld × %lld";
+
+/* Display %lld */
+"display_title %lld" = "Display %lld";
+
+/* Untitled App */
+"unnamed_app" = "Untitled App";
+
+/* Select Display */
+"select_display" = "Select Display";
+
+/* Select Application */
+"select_application" = "Select Application";
+
+/* Select */
+"select" = "Select";
+
+/* Open System Settings */
+"open_system_settings" = "Open System Settings";
+
+/* Screen recording permission denied (TCC).
+Please allow this app in System Settings → Privacy & Security → Screen Recording, then relaunch.
+
+Debug info: %@ */
+"screen_recording_denied %@" = "Screen recording permission denied (TCC).\nPlease allow this app in System Settings → Privacy & Security → Screen Recording, then relaunch.\n\nDebug info: %@";
+
+/* No display available. Please refresh first. */
+"no_display_error" = "No display available. Please refresh first.";
+
+/* Please select an application for audio capture. */
+"select_app_for_audio" = "Please select an application for audio capture.";
+
+/* Please select a recording area first. */
+"select_area_first" = "Please select a recording area first.";
+
+/* Open Main Window */
+"open_main_window" = "Open Main Window";
+
+/* Quit */
+"quit" = "Quit";
+
+/* No microphone detected on this device */
+"no_microphone_hardware" = "No microphone detected on this device";
+
+/* No display found for recording. */
+"no_display_found" = "No display found for recording.";
+
+/* Application not found. It may have quit or has no capturable windows. */
+"app_not_found" = "Application not found. It may have quit or has no capturable windows.";
+
+/* Recording is already in progress. */
+"already_recording" = "Recording is already in progress.";
+
+/* No active recording. */
+"not_recording" = "No active recording.";
+
+/* Recording stream stopped. */
+"stream_stopped" = "Recording stream stopped.";
+
+/* Core Audio Process Tap requires macOS 14.2 or later. */
+"process_tap_unavailable" = "Core Audio Process Tap requires macOS 14.2 or later.";
+
+/* Microphone permission denied. Please allow this app in System Settings → Privacy & Security → Microphone. */
+"mic_permission_denied" = "Microphone permission denied. Please allow this app in System Settings → Privacy & Security → Microphone.";
+
+/* %@ failed. CoreAudio status: %lld. */
+"operation_failed %lld" = "%@ failed. CoreAudio status: %lld.";
+
+/* CoreAudio object not found for process %lld. Make sure the app is playing audio. */
+"process_object_not_found %lld" = "CoreAudio object not found for process %lld. Make sure the app is playing audio.";
+
+/* Unable to read Process Tap UID. */
+"tap_uid_unavailable" = "Unable to read Process Tap UID.";
+
+/* Process Tap returned an unsupported audio format. */
+"invalid_audio_format" = "Process Tap returned an unsupported audio format.";
+
+/* Off */
+"off" = "Off";
+
+/* No system audio recording. */
+"no_system_audio" = "No system audio recording.";
+
+/* Record all system audio without affecting current output. */
+"global_system_audio_detail" = "Record all system audio without affecting current output.";
+
+/* Capture only the selected app's windows and audio. Ideal for browsers, players, or meeting apps. */
+"app_audio_detail" = "Capture only the selected app's windows and audio. Ideal for browsers, players, or meeting apps.";

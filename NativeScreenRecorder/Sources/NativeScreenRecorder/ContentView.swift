@@ -38,9 +38,9 @@ struct ContentView: View {
     private var header: some View {
         HStack {
             VStack(alignment: .leading, spacing: 5) {
-                Text(L.appTitle)
+                Text(verbatim: NSLocalizedString("app_title", bundle: .module, comment: ""))
                     .font(.system(size: 30, weight: .bold))
-                Text(L.subtitle)
+                Text(verbatim: NSLocalizedString("subtitle", bundle: .module, comment: ""))
                     .font(.system(size: 15))
                     .foregroundStyle(.secondary)
             }
@@ -77,43 +77,98 @@ struct ContentView: View {
             }
             .buttonStyle(.borderless)
             .disabled(store.isRecording)
-            .help(L.refreshTooltip)
+            .help(Text("refresh_tooltip", bundle: .module))
         }
     }
 
     private var heroControls: some View {
-        HStack(spacing: 0) {
-            HeroModeButton(
-                title: L.fullScreen,
-                systemImage: "desktopcomputer",
-                tint: .cyan,
-                isSelected: store.captureMode == .fullScreen
-            ) {
-                store.captureMode = .fullScreen
+        ZStack {
+            // 背景内容：图标、文字、开关
+            VStack(spacing: 16) {
+                // 第一行：图标
+                HStack(spacing: 0) {
+                    HeroIcon(systemImage: "desktopcomputer", tint: .cyan, size: 64)
+                        .frame(maxWidth: .infinity)
+
+                    HeroIcon(systemImage: "crop", tint: .purple, size: 64)
+                        .frame(maxWidth: .infinity)
+
+                    // 中间留空给录制按钮
+                    Spacer().frame(maxWidth: .infinity)
+
+                    HeroIcon(systemImage: "mic", tint: .gray, size: 58)
+                        .frame(maxWidth: .infinity)
+
+                    HeroIcon(systemImage: "video.fill", tint: .orange, size: 58)
+                        .frame(maxWidth: .infinity)
+                }
+
+                // 第二行：文字
+                HStack(spacing: 0) {
+                    Text(String.localized("full_screen"))
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity)
+
+                    Text(String.localized("custom_area"))
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity)
+
+                    Spacer().frame(maxWidth: .infinity)
+
+                    Text(String.localized("microphone"))
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity)
+
+                    Text(String.localized("system_audio"))
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity)
+                }
+
+                // 第三行：状态指示和开关
+                HStack(spacing: 0) {
+                    Circle()
+                        .fill(store.captureMode == .fullScreen ? Color(red: 0.10, green: 0.50, blue: 0.95) : .secondary.opacity(0.35))
+                        .frame(width: 7, height: 7)
+                        .frame(maxWidth: .infinity)
+
+                    Circle()
+                        .fill(store.captureMode == .area ? Color(red: 0.10, green: 0.50, blue: 0.95) : .secondary.opacity(0.35))
+                        .frame(width: 7, height: 7)
+                        .frame(maxWidth: .infinity)
+
+                    Spacer().frame(maxWidth: .infinity)
+
+                    Toggle("", isOn: Binding(
+                        get: { store.isMicrophoneEnabled },
+                        set: { _ in store.toggleMicrophone() }
+                    ))
+                    .toggleStyle(.switch)
+                    .labelsHidden()
+                    .scaleEffect(0.72)
+                    .frame(width: 42, height: 22)
+                    .frame(maxWidth: .infinity)
+
+                    Toggle("", isOn: Binding(
+                        get: { store.audioMode != .none },
+                        set: { isOn in
+                            store.audioMode = isOn ? .globalSystem : .none
+                        }
+                    ))
+                    .toggleStyle(.switch)
+                    .labelsHidden()
+                    .scaleEffect(0.72)
+                    .frame(width: 42, height: 22)
+                    .frame(maxWidth: .infinity)
+                }
             }
-            .disabled(store.isRecording)
+            .padding(.horizontal, 48)
+            .padding(.vertical, 22)
 
-            Spacer(minLength: 20)
-
-            HeroModeButton(
-                title: L.customArea,
-                systemImage: "crop",
-                tint: .purple,
-                isSelected: store.captureMode == .area
-            ) {
-                store.captureMode = .area
-                store.startAreaSelection()
-            }
-            .disabled(store.isRecording)
-
-            Spacer(minLength: 24)
-
-            Divider()
-                .frame(height: 76)
-                .opacity(0.35)
-
-            Spacer(minLength: 24)
-
+            // 录制按钮（居中覆盖）
             Button {
                 Task {
                     if store.isRecording {
@@ -123,101 +178,56 @@ struct ContentView: View {
                     }
                 }
             } label: {
-                VStack(spacing: 10) {
-                    ZStack {
-                        // Outer white ring — fades out when recording
-                        Circle()
-                            .fill(.white.opacity(0.55))
-                            .frame(width: 112, height: 112)
-                            .shadow(color: .red.opacity(0.28), radius: 34, y: 14)
-                            .opacity(store.isRecording ? 0 : 1)
-                            .animation(.easeInOut(duration: 0.3), value: store.isRecording)
-
-                        Circle()
-                            .stroke(.white.opacity(0.75), lineWidth: 1)
-                            .frame(width: 112, height: 112)
-                            .opacity(store.isRecording ? 0 : 1)
-                            .animation(.easeInOut(duration: 0.3), value: store.isRecording)
-
-                        // Inner red shape — morphs from circle to capsule, always centered
-                        RedRecordShape(isRecording: store.isRecording)
-                            .shadow(color: .red.opacity(0.42), radius: 16, y: 8)
-
-                        // Elapsed time overlay
-                        if store.isRecording {
-                            HStack(spacing: 10) {
-                                Circle()
-                                    .fill(.white)
-                                    .frame(width: 8, height: 8)
-                                Text(store.formattedElapsedTime)
-                                    .font(.system(size: 18, weight: .medium, design: .monospaced))
-                                    .foregroundStyle(.white)
-                            }
-                            .transition(.opacity)
-                            .animation(.easeInOut(duration: 0.3), value: store.isRecording)
-                        }
-                    }
-                    .frame(width: 180, height: 112)
-
-                    Text(store.isRecording ? L.stopRecording : L.startRecording)
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(.primary)
+                ZStack {
+                    // Outer white ring — fades out when recording
+                    Circle()
+                        .fill(.white.opacity(0.55))
+                        .frame(width: 112, height: 112)
+                        .shadow(color: .red.opacity(0.28), radius: 34, y: 14)
                         .opacity(store.isRecording ? 0 : 1)
-                        .animation(.easeInOut(duration: 0.25), value: store.isRecording)
+                        .animation(.easeInOut(duration: 0.3), value: store.isRecording)
+
+                    Circle()
+                        .stroke(.white.opacity(0.75), lineWidth: 1)
+                        .frame(width: 112, height: 112)
+                        .opacity(store.isRecording ? 0 : 1)
+                        .animation(.easeInOut(duration: 0.3), value: store.isRecording)
+
+                    // Inner red shape — morphs from circle to capsule, always centered
+                    RedRecordShape(isRecording: store.isRecording)
+                        .shadow(color: .red.opacity(0.42), radius: 16, y: 8)
+
+                    // Elapsed time overlay
+                    if store.isRecording {
+                        HStack(spacing: 10) {
+                            Circle()
+                                .fill(.white)
+                                .frame(width: 8, height: 8)
+                            Text(store.formattedElapsedTime)
+                                .font(.system(size: 18, weight: .medium, design: .monospaced))
+                                .foregroundStyle(.white)
+                        }
+                        .transition(.opacity)
+                        .animation(.easeInOut(duration: 0.3), value: store.isRecording)
+                    }
                 }
             }
             .buttonStyle(.plain)
-
-            Spacer(minLength: 24)
-
-            Divider()
-                .frame(height: 76)
-                .opacity(0.35)
-
-            Spacer(minLength: 24)
-
-            HeroToggleButton(
-                title: L.microphone,
-                systemImage: "mic",
-                tint: .gray,
-                isOn: Binding(
-                    get: { store.isMicrophoneEnabled },
-                    set: { _ in store.toggleMicrophone() }
-                )
-            )
-            .disabled(store.isRecording)
-
-            Spacer(minLength: 20)
-
-            HeroToggleButton(
-                title: L.systemAudio,
-                systemImage: "video.fill",
-                tint: .orange,
-                isOn: Binding(
-                    get: { store.audioMode != .none },
-                    set: { isOn in
-                        store.audioMode = isOn ? .globalSystem : .none
-                    }
-                )
-            )
-            .disabled(store.isRecording)
         }
-        .padding(.horizontal, 48)
-        .padding(.vertical, 22)
         .frame(maxWidth: .infinity)
         .glassCard(cornerRadius: 18, shadowRadius: 26)
     }
 
     private var capturePanel: some View {
         VStack(alignment: .leading, spacing: 0) {
-            settingsRow(L.captureMode) {
+            settingsRow(String.localized("capture_mode")) {
                 segmentedCaptureMode
             }
 
             panelDivider
 
             if store.captureMode == .area {
-                settingsRow(L.selectArea) {
+                settingsRow(String.localized("select_area")) {
                     HStack(spacing: 12) {
                         Button {
                             store.startAreaSelection()
@@ -235,7 +245,7 @@ struct ContentView: View {
                     }
                 }
             } else {
-                settingsRow(L.display) {
+                settingsRow(String.localized("display")) {
                     Menu {
                         ForEach(store.displays) { display in
                             Button(display.title) {
@@ -252,11 +262,11 @@ struct ContentView: View {
 
             panelDivider
 
-            settingsRow(L.audioSource) {
+            settingsRow(String.localized("audio_source")) {
                 segmentedAudioMode
             }
 
-            settingsRow(L.application) {
+            settingsRow(String.localized("application")) {
                 if store.audioMode == .selectedApplication {
                     Menu {
                         ForEach(store.applications) { app in
@@ -270,7 +280,7 @@ struct ContentView: View {
                     .buttonStyle(.plain)
                     .disabled(store.isRecording)
                 } else {
-                    selectionField(L.global, showsChevron: false)
+                    selectionField(String.localized("global"), showsChevron: false)
                 }
             }
         }
@@ -280,15 +290,15 @@ struct ContentView: View {
 
     private var codecPanel: some View {
         VStack(alignment: .leading, spacing: 18) {
-            panelTitle(L.encoding, systemImage: "cpu")
+            panelTitle(String.localized("encoding"), systemImage: "cpu")
 
-            Picker(L.videoCodec, selection: $store.preferredCodec) {
+            HStack(spacing: 6) {
                 ForEach(VideoCodec.allCases) { codec in
-                    Text(codec.title).tag(codec)
+                    pillButton(codec.title, isSelected: store.preferredCodec == codec) {
+                        store.preferredCodec = codec
+                    }
                 }
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
             .frame(height: controlHeight)
             .disabled(store.isRecording)
         }
@@ -299,7 +309,7 @@ struct ContentView: View {
 
     private var storagePanel: some View {
         VStack(alignment: .leading, spacing: 18) {
-            panelTitle(L.storage, systemImage: "folder")
+            panelTitle(String.localized("storage"), systemImage: "folder")
 
             HStack(spacing: 12) {
                 Text(store.outputURL.lastPathComponent)
@@ -322,7 +332,7 @@ struct ContentView: View {
                 }
                 .buttonStyle(.borderless)
                 .disabled(store.isRecording)
-                .help(L.chooseSaveLocation)
+                .help(Text("choose_save_location", bundle: .module))
 
                 Button {
                     store.openOutputFolder()
@@ -331,7 +341,7 @@ struct ContentView: View {
                         .frame(width: 34, height: 34)
                 }
                 .buttonStyle(.borderless)
-                .help(L.openSaveLocation)
+                .help(Text("open_save_location", bundle: .module))
             }
         }
         .padding(20)
@@ -351,7 +361,7 @@ struct ContentView: View {
                         .fixedSize(horizontal: false, vertical: true)
 
                     if store.isPermissionDenied {
-                        Button(L.openSystemSettings) {
+                        Button(String.localized("open_system_settings")) {
                             store.openScreenRecordingPrefs()
                         }
                         .font(.callout)
@@ -365,7 +375,7 @@ struct ContentView: View {
                         .fill(store.isRecording ? .red : .green)
                         .frame(width: 8, height: 8)
 
-                    Text(store.isRecording ? L.recording : L.ready)
+                    Text(store.isRecording ? "recording" : "ready", bundle: .module)
                         .font(.subheadline.weight(.medium))
 
                     Text(store.statusText)
@@ -392,15 +402,15 @@ struct ContentView: View {
 
     private var selectedAreaText: String {
         guard let rect = store.selectedAreaRect else {
-            return L.clickToSelectArea
+            return String.localized("click_to_select_area")
         }
-        return String(format: L.selectedArea, Int(rect.width), Int(rect.height))
+        return String.localized("selected_area \(Int(rect.width)) \(Int(rect.height))")
     }
 
     private var selectedDisplayTitle: String {
         guard let id = store.selectedDisplayID,
               let display = store.displays.first(where: { $0.id == id }) else {
-            return L.selectDisplay
+            return String.localized("select_display")
         }
         return display.title
     }
@@ -408,17 +418,17 @@ struct ContentView: View {
     private var selectedApplicationTitle: String {
         guard let id = store.selectedApplicationID,
               let app = store.applications.first(where: { $0.id == id }) else {
-            return L.selectApplication
+            return String.localized("select_application")
         }
         return app.name
     }
 
     private var segmentedCaptureMode: some View {
         HStack(spacing: 6) {
-            pillButton(L.fullScreen, isSelected: store.captureMode == .fullScreen) {
+            pillButton(String.localized("full_screen"), systemImage: "desktopcomputer", isSelected: store.captureMode == .fullScreen) {
                 store.captureMode = .fullScreen
             }
-            pillButton(L.areaSelect, isSelected: store.captureMode == .area) {
+            pillButton(String.localized("area_select"), systemImage: "crop", isSelected: store.captureMode == .area) {
                 store.captureMode = .area
                 store.startAreaSelection()
             }
@@ -429,10 +439,10 @@ struct ContentView: View {
 
     private var segmentedAudioMode: some View {
         HStack(spacing: 8) {
-            pillButton(L.globalSystemAudio, systemImage: "waveform", isSelected: store.audioMode == .globalSystem) {
+            pillButton(String.localized("global_system_audio"), systemImage: "waveform", isSelected: store.audioMode == .globalSystem) {
                 store.audioMode = .globalSystem
             }
-            pillButton(L.appAudio, systemImage: "scope", isSelected: store.audioMode == .selectedApplication) {
+            pillButton(String.localized("app_audio"), systemImage: "scope", isSelected: store.audioMode == .selectedApplication) {
                 store.audioMode = .selectedApplication
             }
         }
@@ -544,11 +554,34 @@ struct ContentView: View {
     }
 }
 
+private struct HeroIcon: View {
+    let systemImage: String
+    let tint: Color
+    let size: CGFloat
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(tint.opacity(0.18))
+                .frame(width: size, height: size)
+                .shadow(color: tint.opacity(0.42), radius: 16, y: 8)
+            Circle()
+                .fill(.white.opacity(0.32))
+                .frame(width: size * 0.82, height: size * 0.82)
+            Image(systemName: systemImage)
+                .font(.system(size: size * 0.39, weight: .semibold))
+                .foregroundStyle(.white)
+                .shadow(color: tint.opacity(0.7), radius: 8)
+        }
+    }
+}
+
 private struct HeroModeButton: View {
     let title: String
     let systemImage: String
     let tint: Color
     let isSelected: Bool
+    let width: CGFloat
     let action: () -> Void
 
     var body: some View {
@@ -571,12 +604,14 @@ private struct HeroModeButton: View {
                 Text(title)
                     .font(.system(size: 14, weight: .medium))
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
 
                 Circle()
                     .fill(isSelected ? Color(red: 0.10, green: 0.50, blue: 0.95) : .secondary.opacity(0.35))
                     .frame(width: 7, height: 7)
             }
-            .frame(width: 82)
+            .frame(width: width)
         }
         .buttonStyle(.plain)
     }
@@ -587,6 +622,7 @@ private struct HeroToggleButton: View {
     let systemImage: String
     let tint: Color
     @Binding var isOn: Bool
+    let width: CGFloat
 
     var body: some View {
         VStack(spacing: 10) {
@@ -603,6 +639,8 @@ private struct HeroToggleButton: View {
             Text(title)
                 .font(.system(size: 14, weight: .medium))
                 .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
 
             Toggle("", isOn: $isOn)
                 .toggleStyle(.switch)
@@ -610,7 +648,7 @@ private struct HeroToggleButton: View {
                 .scaleEffect(0.72)
                 .frame(width: 42, height: 22)
         }
-        .frame(width: 74)
+        .frame(width: width)
     }
 }
 

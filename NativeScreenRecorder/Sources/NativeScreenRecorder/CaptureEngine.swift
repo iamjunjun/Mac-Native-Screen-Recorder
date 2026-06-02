@@ -15,19 +15,19 @@ enum CaptureEngineError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .noDisplay:
-            return L.noDisplayFound
+            return String.localized("no_display_found")
         case .noApplication:
-            return L.appNotFound
+            return String.localized("app_not_found")
         case .alreadyRecording:
-            return L.alreadyRecording
+            return String.localized("already_recording")
         case .notRecording:
-            return L.notRecording
+            return String.localized("not_recording")
         case .streamStopped(let error):
-            return error?.localizedDescription ?? L.streamStopped
+            return error?.localizedDescription ?? String.localized("stream_stopped")
         case .processTapUnavailable:
-            return L.processTapUnavailable
+            return String.localized("process_tap_unavailable")
         case .microphonePermissionDenied:
-            return L.micPermissionDenied
+            return String.localized("mic_permission_denied")
         }
     }
 }

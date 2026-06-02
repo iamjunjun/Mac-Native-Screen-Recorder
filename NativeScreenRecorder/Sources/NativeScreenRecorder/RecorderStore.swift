@@ -16,7 +16,7 @@ final class RecorderStore: ObservableObject {
     @Published var outputURL: URL = RecorderStore.defaultOutputURL()
     @Published var isRecording = false
     @Published var isMicrophoneEnabled = false
-    @Published var statusText = L.readyToRecord
+    @Published var statusText = String.localized("ready_to_record")
     @Published var errorText: String?
     @Published var elapsedTime: TimeInterval = 0
     @Published var micWarningText: String?
@@ -43,7 +43,7 @@ final class RecorderStore: ObservableObject {
             displays = content.displays.map {
                 DisplayOption(
                     id: $0.displayID,
-                    title: L.displayTitle($0.displayID),
+                    title: String.localized("display_title \($0.displayID)"),
                     width: $0.width,
                     height: $0.height
                 )
@@ -56,7 +56,7 @@ final class RecorderStore: ObservableObject {
                 .map {
                     ApplicationOption(
                         id: $0.processID,
-                        name: $0.applicationName.isEmpty ? L.unnamedApp : $0.applicationName,
+                        name: $0.applicationName.isEmpty ? String.localized("unnamed_app") : $0.applicationName,
                         bundleIdentifier: $0.bundleIdentifier
                     )
                 }
@@ -67,7 +67,7 @@ final class RecorderStore: ObservableObject {
 
             selectedDisplayID = selectedDisplayID ?? displays.first?.id
             selectedApplicationID = selectedApplicationID ?? applications.first?.id
-            statusText = L.contentRefreshed
+            statusText = String.localized("content_refreshed")
             errorText = nil
         } catch {
             let nsError = error as NSError
@@ -76,11 +76,11 @@ final class RecorderStore: ObservableObject {
                nsError.localizedDescription.contains("not authorized") || nsError.localizedDescription.contains("denied") ||
                nsError.localizedDescription.contains("没有权限") || nsError.localizedDescription.contains("授权") || nsError.localizedDescription.contains("TCC") ||
                nsError.localizedDescription.contains("拒绝") {
-                errorText = String(format: L.screenRecordingDenied, rawInfo)
+                errorText = String(localized: "screen_recording_denied \(rawInfo)", bundle: .module)
             } else {
                 errorText = readableError(error)
             }
-            statusText = L.failedToReadContent
+            statusText = String.localized("failed_to_read_content")
         }
     }
 
@@ -121,7 +121,7 @@ final class RecorderStore: ObservableObject {
         )
 
         if status != noErr || deviceID == kAudioObjectUnknown {
-            micWarningText = L.noMicrophoneHardware
+            micWarningText = String.localized("no_microphone_hardware")
             isMicrophoneEnabled = false
             return
         }
@@ -148,7 +148,7 @@ final class RecorderStore: ObservableObject {
             let deviceName = cfName as String
             // 检查是否是有效的输入设备
             if deviceName.isEmpty {
-                micWarningText = L.noMicrophoneHardware
+                micWarningText = String.localized("no_microphone_hardware")
                 isMicrophoneEnabled = false
                 return
             }
@@ -174,7 +174,7 @@ final class RecorderStore: ObservableObject {
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         panel.allowsMultipleSelection = false
-        panel.prompt = L.select
+        panel.prompt = String.localized("select")
 
         if panel.runModal() == .OK, let folder = panel.url {
             outputURL = folder.appendingPathComponent(Self.defaultFileName())
@@ -206,7 +206,7 @@ final class RecorderStore: ObservableObject {
             )
             self.selectedAreaRect = quartzRect
             self.captureMode = .area
-            self.statusText = String(format: L.areaSelected, Int(quartzRect.width), Int(quartzRect.height))
+            self.statusText = String.localized("area_selected \(Int(quartzRect.width)) \(Int(quartzRect.height))")
         }
 
         overlayView.onCancel = { [weak self, weak window] in
@@ -220,17 +220,17 @@ final class RecorderStore: ObservableObject {
     func startRecording() async {
         guard !isRecording else { return }
         guard let displayID = selectedDisplayID else {
-            errorText = L.noDisplayError
+            errorText = String.localized("no_display_error")
             return
         }
 
         if audioMode == .selectedApplication && selectedApplicationID == nil {
-            errorText = L.selectAppForAudio
+            errorText = String.localized("select_app_for_audio")
             return
         }
 
         if captureMode == .area && selectedAreaRect == nil {
-            errorText = L.selectAreaFirst
+            errorText = String.localized("select_area_first")
             return
         }
 
@@ -252,7 +252,7 @@ final class RecorderStore: ObservableObject {
             elapsedTime = 0
             recordingStartTime = Date()
             startTimer()
-            statusText = String(format: L.recordingTo, outputURL.lastPathComponent)
+            statusText = String.localized("recording_to \(outputURL.lastPathComponent)")
             errorText = nil
 
             if captureMode == .area, let areaRect = selectedAreaRect, let displayID = selectedDisplayID {
@@ -260,7 +260,7 @@ final class RecorderStore: ObservableObject {
             }
         } catch {
             errorText = readableError(error)
-            statusText = L.failedToStart
+            statusText = String.localized("failed_to_start")
         }
     }
 
@@ -274,13 +274,13 @@ final class RecorderStore: ObservableObject {
             try await captureEngine.stop()
             isRecording = false
             stopTimer()
-            statusText = String(format: L.recordingSaved, outputURL.path)
+            statusText = String.localized("recording_saved \(outputURL.path)")
             errorText = nil
         } catch {
             isRecording = false
             stopTimer()
             errorText = readableError(error)
-            statusText = L.errorStopping
+            statusText = String.localized("error_stopping")
         }
     }
 

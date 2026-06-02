@@ -11,30 +11,26 @@ cd "$ROOT_DIR"
 rm -rf "$OUTPUT_DIR"
 mkdir -p "$OUTPUT_DIR"
 
-package_app() {
-    local lang="$1"
-    local suffix="$2"
-    local app_dir="$OUTPUT_DIR/NativeScreenRecorder_v${VERSION}_${suffix}.app"
-    local contents="$app_dir/Contents"
-
-    mkdir -p "$contents/MacOS" "$contents/Resources"
-    cp "$BUILD_DIR/NativeScreenRecorder" "$contents/MacOS/"
-    cp "$ROOT_DIR/App/Info.plist" "$contents/"
-    cp "$ROOT_DIR/App/AppIcon.icns" "$contents/Resources/"
-    chmod +x "$contents/MacOS/NativeScreenRecorder"
-    xattr -cr "$app_dir" 2>/dev/null || true
-    codesign --deep --sign - "$app_dir" 2>/dev/null || true
-    echo "$app_dir"
-}
-
-echo "Building Chinese version..."
+echo "Building..."
 swift build -c release
-package_app "zh" "中文"
 
-echo "Building English version..."
-swift build -c release -Xswiftc -DENGLISH
-package_app "en" "English"
+app_dir="$OUTPUT_DIR/NativeScreenRecorder_v${VERSION}.app"
+contents="$app_dir/Contents"
+
+mkdir -p "$contents/MacOS" "$contents/Resources"
+cp "$BUILD_DIR/NativeScreenRecorder" "$contents/MacOS/"
+cp "$ROOT_DIR/App/Info.plist" "$contents/"
+cp "$ROOT_DIR/App/AppIcon.icns" "$contents/Resources/"
+
+# 复制本地化资源到 app bundle
+if [ -d "$BUILD_DIR/NativeScreenRecorder_NativeScreenRecorder.bundle" ]; then
+    cp -R "$BUILD_DIR/NativeScreenRecorder_NativeScreenRecorder.bundle" "$contents/Resources/"
+fi
+
+chmod +x "$contents/MacOS/NativeScreenRecorder"
+xattr -cr "$app_dir" 2>/dev/null || true
+codesign --deep --sign - "$app_dir" 2>/dev/null || true
 
 echo ""
 echo "Done! Output:"
-ls -d "$OUTPUT_DIR"/*.app
+echo "$app_dir"

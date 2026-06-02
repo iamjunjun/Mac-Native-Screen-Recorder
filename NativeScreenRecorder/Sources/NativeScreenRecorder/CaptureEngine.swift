@@ -38,8 +38,6 @@ final class CaptureEngine: NSObject, @unchecked Sendable {
     private var writer: MovieFileWriter?
     private var processTap: ProcessTapAudioCapture?
     private var isRecording = false
-    private var isPaused = false
-    private var pauseStartTime: CMTime?
     // Layer 3: Adaptive frame rate — skip frames when screen is static
     private var lastVideoTime: CMTime = .zero
     private var minFrameInterval: Double = 1.0 / 30.0
@@ -206,30 +204,10 @@ final class CaptureEngine: NSObject, @unchecked Sendable {
         try await stream.stopCapture()
         self.stream = nil
         isRecording = false
-        isPaused = false
 
         let writer = self.writer
         self.writer = nil
         try await writer?.finish()
-    }
-
-    func pause() {
-        guard isRecording, !isPaused else { return }
-        isPaused = true
-        pauseStartTime = CMClockGetTime(CMClockGetHostTimeClock())
-        processTap?.pause()
-    }
-
-    func resume() {
-        guard isRecording, isPaused else { return }
-        if let pauseStart = pauseStartTime {
-            let now = CMClockGetTime(CMClockGetHostTimeClock())
-            let pauseDuration = CMTimeGetSeconds(CMTimeSubtract(now, pauseStart))
-            writer?.addPauseDuration(pauseDuration)
-        }
-        pauseStartTime = nil
-        isPaused = false
-        processTap?.resume()
     }
 }
 
@@ -237,8 +215,6 @@ final class CaptureEngine: NSObject, @unchecked Sendable {
 
 extension CaptureEngine: SCStreamOutput {
     func stream(_ stream: SCStream, didOutputSampleBuffer sampleBuffer: CMSampleBuffer, of outputType: SCStreamOutputType) {
-        guard !isPaused else { return }
-
         switch outputType {
         case .screen:
             guard sampleBuffer.isCompleteScreenFrame else { return }

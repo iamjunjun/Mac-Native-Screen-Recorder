@@ -15,7 +15,6 @@ final class RecorderStore: ObservableObject {
     @Published var selectedAreaRect: CGRect? = nil
     @Published var outputURL: URL = RecorderStore.defaultOutputURL()
     @Published var isRecording = false
-    @Published var isPaused = false
     @Published var isMicrophoneEnabled = false
     @Published var statusText = String.localized("ready_to_record")
     @Published var errorText: String?
@@ -26,8 +25,6 @@ final class RecorderStore: ObservableObject {
     private var recordingAreaOverlay: NSWindow?
     private var recordingStartTime: Date?
     private var timerTask: Task<Void, Never>?
-    private var pauseStartTime: Date?
-    private var totalPausedDuration: TimeInterval = 0
 
     var isPermissionDenied: Bool {
         errorText?.contains("TCC") == true || errorText?.contains("权限") == true
@@ -252,10 +249,7 @@ final class RecorderStore: ObservableObject {
 
             try await captureEngine.start(request: request)
             isRecording = true
-            isPaused = false
             elapsedTime = 0
-            totalPausedDuration = 0
-            pauseStartTime = nil
             recordingStartTime = Date()
             startTimer()
             statusText = String.localized("recording_to \(outputURL.lastPathComponent)")
@@ -279,36 +273,15 @@ final class RecorderStore: ObservableObject {
         do {
             try await captureEngine.stop()
             isRecording = false
-            isPaused = false
             stopTimer()
             statusText = String.localized("recording_saved \(outputURL.path)")
             errorText = nil
         } catch {
             isRecording = false
-            isPaused = false
             stopTimer()
             errorText = readableError(error)
             statusText = String.localized("error_stopping")
         }
-    }
-
-    func pauseRecording() {
-        guard isRecording, !isPaused else { return }
-        isPaused = true
-        pauseStartTime = Date()
-        captureEngine.pause()
-        statusText = String.localized("recording_paused")
-    }
-
-    func resumeRecording() {
-        guard isRecording, isPaused else { return }
-        if let pauseStart = pauseStartTime {
-            totalPausedDuration += Date().timeIntervalSince(pauseStart)
-        }
-        pauseStartTime = nil
-        isPaused = false
-        captureEngine.resume()
-        statusText = String.localized("recording_to \(outputURL.lastPathComponent)")
     }
 
     private static func defaultOutputURL() -> URL {
@@ -329,9 +302,7 @@ final class RecorderStore: ObservableObject {
                 try? await Task.sleep(nanoseconds: 100_000_000) // 0.1s
                 guard let self, let start = self.recordingStartTime else { break }
                 await MainActor.run {
-                    if !self.isPaused {
-                        self.elapsedTime = Date().timeIntervalSince(start) - self.totalPausedDuration
-                    }
+                    self.elapsedTime = Date().timeIntervalSince(start)
                 }
             }
         }

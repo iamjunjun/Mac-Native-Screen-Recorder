@@ -86,7 +86,7 @@ macOS 屏幕原生使用 Display P3 广色域，但视频标准使用 Rec.709。
 
 | 版本 | 下载 |
 |------|------|
-| v2.6.5 (最新) | [NativeScreenRecorder_v2.6.5.zip](Releases/NativeScreenRecorder_v2.6.5.zip) |
+| v2.6.4 (最新) | [NativeScreenRecorder_v2.6.4.zip](Releases/NativeScreenRecorder_v2.6.4.zip) |
 
 下载后解压，将 `.app` 拖入「应用程序」文件夹即可。软件会自动跟随系统语言显示中文或英文界面。
 
@@ -161,7 +161,6 @@ swift build -c release -Xswiftc -DENGLISH
 | v2.6.2 | 菜单栏功能 + 麦克风硬件检测 + 系统语言自动跟随 + UI 优化 |
 | v2.6.3 | **高性能零拷贝编码** — IOSurface 零拷贝管线 + CQ 恒定质量编码 + 自适应帧率，CPU 占用从 120-150% 降至 10-15% |
 | v2.6.4 | 菜单栏和 UI 交互问题修复 |
-| v2.6.5 | **暂停录制功能** — 菜单栏和主窗口支持暂停/恢复录制，快捷键 Cmd+P |
 
 ---
 
